@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Project Planner</title>
+    <meta name="description" content="고급 계층형 간트 차트 프로젝트 관리 애플리케이션">
+    <link rel="stylesheet" href="index.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div id="app" class="app-container">
+        <!-- Header Section -->
+        <header class="main-header">
+            <div class="header-left">
+                <button class="menu-toggle"><i data-lucide="layout-grid"></i></button>
+                <h1 class="logo" contenteditable="true" spellcheck="false" id="appTitle">생산관리</h1>
+            </div>
+            <div class="header-right">
+                <div class="search-bar">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="searchInput" placeholder="Search (Ctrl+E)">
+                </div>
+                <div class="timeline-controls">
+                    <button class="icon-btn" id="zoomOut"><i data-lucide="zoom-out"></i></button>
+                    <button class="icon-btn" id="zoomIn"><i data-lucide="zoom-in"></i></button>
+                    <div class="date-navigator">
+                        <button class="nav-btn" id="prevStart"><i data-lucide="chevron-left"></i></button>
+                        <span class="current-period" id="viewStartDateText">2026. 1. 1.</span>
+                        <button class="nav-btn" id="nextStart"><i data-lucide="chevron-right"></i></button>
+                    </div>
+                    <span class="range-separator">-</span>
+                    <div class="date-navigator">
+                        <button class="nav-btn" id="prevEnd"><i data-lucide="chevron-left"></i></button>
+                        <span class="current-period" id="viewEndDateText">2026. 4. 7.</span>
+                        <button class="nav-btn" id="nextEnd"><i data-lucide="chevron-right"></i></button>
+                    </div>
+                </div>
+                <button class="pro-upgrade-btn"><span class="pro-badge">PRO</span> Upgrade</button>
+                <button class="icon-btn"><i data-lucide="menu"></i></button>
+                <div class="user-avatar"></div>
+            </div>
+        </header>
+
+        <!-- Main Content Section -->
+        <main class="main-content">
+            <!-- Left Panel: Tree Grid -->
+            <aside class="sidebar-panel">
+                <div class="panel-header">
+                    <button class="icon-btn back-btn"><i data-lucide="chevron-left"></i></button>
+                    <button class="add-task-btn" id="globalAddTask"><i data-lucide="plus"></i></button>
+                </div>
+                <div class="tree-grid-container" id="treeGrid">
+                    <!-- Tree items will be injected here -->
+                </div>
+            </aside>
+
+            <!-- Right Panel: Gantt Chart -->
+            <section class="gantt-panel">
+                <div class="gantt-container" id="ganttContainer">
+                    <div class="gantt-timeline-header" id="ganttHeader">
+                        <!-- Timeline dates will be injected here -->
+                    </div>
+                    <div class="gantt-body" id="ganttBody">
+                        <!-- Gantt bars will be injected here -->
+                        <div class="today-indicator"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Edit Modal -->
+        <div id="editModal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <nav class="modal-tabs">
+                    <button class="tab-btn active" data-tab="general">General</button>
+                    <button class="tab-btn" data-tab="description">Description</button>
+                    <button class="tab-btn" data-tab="resources">Resources</button>
+                    <button class="tab-btn" data-tab="attachment">Attachment</button>
+                </nav>
+                <div class="tab-panels">
+                    <!-- General Tab -->
+                    <div class="tab-panel active" id="tab-general">
+                        <div class="form-row">
+                            <div class="form-group color-picker-group">
+                                <label>Color</label>
+                                <div class="color-preview" id="editTaskColor"></div>
+                            </div>
+                            <div class="form-group flex-grow">
+                                <label>Label</label>
+                                <input type="text" id="editTaskLabel" placeholder="Task Name">
+                            </div>
+                            <div class="form-group">
+                                <label>Type</label>
+                                <select id="editTaskType">
+                                    <option value="Project">Project</option>
+                                    <option value="Task">Task</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row date-row">
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <div class="date-input-wrap">
+                                    <input type="date" id="editTaskStart">
+                                    <i data-lucide="calendar"></i>
+                                </div>
+                            </div>
+                            <div class="arrow-indicator">➔</div>
+                            <div class="form-group compact">
+                                <label>Weekdays</label>
+                                <div class="number-input-wrap">
+                                    <input type="number" id="editTaskWeekdays" min="1">
+                                    <i data-lucide="briefcase"></i>
+                                </div>
+                            </div>
+                            <div class="arrow-indicator">➔</div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <div class="date-input-wrap">
+                                    <input type="date" id="editTaskEnd">
+                                    <i data-lucide="calendar"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>State Icon</label>
+                                <select id="editTaskState">
+                                    <option value="none">None</option>
+                                    <option value="running">Running</option>
+                                    <option value="blocked">Blocked</option>
+                                    <option value="done">Done</option>
+                                </select>
+                            </div>
+                            <div class="form-group compact">
+                                <label>Progress</label>
+                                <div class="progress-input-wrap">
+                                    <input type="number" id="editTaskProgress" min="0" max="100">
+                                    <span>%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Description Tab -->
+                    <div class="tab-panel" id="tab-description">
+                        <textarea id="editTaskDesc" placeholder="Long description"></textarea>
+                    </div>
+                    <!-- Resources Tab -->
+                    <div class="tab-panel" id="tab-resources">
+                        <div class="resource-section">
+                            <p class="section-label">Assigned resources</p>
+                            <div class="resource-list" id="resourceList"></div>
+                        </div>
+                        <div class="resource-add">
+                            <p class="section-label">Add resource</p>
+                            <button class="add-resource-btn">
+                                <img src="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png"
+                                    alt="Drive" width="16">
+                                Add from directory ...
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Attachment Tab -->
+                    <div class="tab-panel" id="tab-attachment">
+                        <div class="attachment-placeholder">
+                            <i data-lucide="paperclip"></i>
+                            <p>No attachments yet.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="footer-btn delete" id="deleteTask"><i data-lucide="trash-2"></i> Delete</button>
+                    <div class="footer-actions">
+                        <button class="footer-btn cancel" id="cancelEdit">Cancel</button>
+                        <button class="footer-btn save" id="saveTask">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div id="contextMenu" class="context-menu hidden">
+            <ul>
+                <li data-action="newChild"><i data-lucide="corner-down-right"></i> New child item ...</li>
+                <li data-action="newSameRow"><i data-lucide="list-plus"></i> New item on same row ...</li>
+                <li class="separator"></li>
+                <li data-action="edit"><i data-lucide="edit-3"></i> Edit item ...</li>
+                <li data-action="copy"><i data-lucide="copy"></i> Copy items</li>
+                <li data-action="paste" class="disabled"><i data-lucide="clipboard-list"></i> Paste item as child ...
+                </li>
+                <li class="separator"></li>
+                <li data-action="saveTemplate"><i data-lucide="file-up"></i> Save as template ...</li>
+                <li data-action="moveUp"><i data-lucide="arrow-up"></i> Move up</li>
+                <li data-action="moveDown"><i data-lucide="arrow-down"></i> Move Down</li>
+                <li class="separator"></li>
+                <li data-action="state"><i data-lucide="file-digit"></i> State Icon <i data-lucide="chevron-right"
+                        class="sub-icon"></i></li>
+                <li data-action="openAttachment" class="disabled"><i data-lucide="paperclip"></i> Open attachment</li>
+                <li class="separator"></li>
+                <li data-action="delete" class="danger"><i data-lucide="trash-2"></i> Delete item</li>
+            </ul>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
