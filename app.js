@@ -891,3 +891,54 @@ class GanttApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new GanttApp();
 });
+
+// --- Member Management Add-on ---
+async function renderUserList() {
+    const listContainer = document.querySelector('.admin-list-container');
+    if (!listContainer) return;
+    listContainer.innerHTML = 'Loading...';
+
+    // Using app's supabase client
+    const { data: users, error } = await window.app.supabase.from('profiles').select('*');
+
+    if (error) {
+        console.error('Error fetching users:', error);
+        listContainer.innerHTML = 'Error loading users.';
+        return;
+    }
+
+    let html = '<table class="admin-table"><tr><th>이름</th><th>이메일</th><th>프로젝트 권한 설정</th></tr>';
+    users.forEach(user => {
+        html += `
+            <tr>
+                <td>${user.display_name || '이름 없음'}</td>
+                <td>${user.email}</td>
+                <td>
+                    <input type="text" placeholder="프로젝트명" id="proj-${user.id}" style="width:100px; padding:4px;">
+                    <button onclick="grantPermission('${user.id}', 'read')">읽기</button>
+                    <button onclick="grantPermission('${user.id}', 'write')">쓰기</button>
+                </td>
+            </tr>`;
+    });
+    html += '</table>';
+    listContainer.innerHTML = html;
+}
+
+async function grantPermission(userId, type) {
+    const projectName = document.getElementById(`proj-${userId}`).value;
+    if (!projectName) return alert('프로젝트명을 입력하세요.');
+
+    const upsertData = {
+        user_id: userId,
+        project_name: projectName,
+        can_read: type === 'read' || type === 'write',
+        can_write: type === 'write'
+    };
+
+    const { error } = await window.app.supabase
+        .from('project_permissions')
+        .upsert(upsertData, { onConflict: 'user_id, project_name' });
+
+    if (error) alert('권한 부여 실패: ' + error.message);
+    else alert(`${projectName} 프로젝트에 대한 ${type} 권한이 부여되었습니다.`);
+}
