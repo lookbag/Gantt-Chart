@@ -14,6 +14,7 @@ class GanttApp {
         this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
         this.tasks = [];
+        this.activeProject = localStorage.getItem('lastProject') || null;
 
         // 초기 날짜 설정: 오늘 기준 7일 전 시작, 4개월 후 종료
         const today = new Date();
@@ -26,12 +27,23 @@ class GanttApp {
         this.editingTaskId = null;
         this.searchQuery = '';
 
+        window.app = this;
         this.init();
     }
 
     async init() {
         this.bindEvents();
-        this.setupRealtime(); // 실시간 구독 초기화 추가
+        this.setupRealtime();
+
+        if (Auth.isLoggedIn) {
+            await this.fetchSidebarProjects();
+            if (this.activeProject) {
+                this.loadTasks();
+            } else {
+                this.renderInitialState();
+            }
+        }
+
         lucide.createIcons();
     }
 
@@ -52,14 +64,23 @@ class GanttApp {
     // --- Supabase Data Sync ---
 
     async loadTasks() {
-        if (!Auth.isLoggedIn) return; // 로그인 전이면 로드 안함
+        if (!Auth.isLoggedIn) return;
 
         try {
-            // 현재 화면에 입력된 프로젝트 제목 가져오기
-            const projectName = document.getElementById('appTitle').innerText.trim();
+            const projectName = this.activeProject;
+            if (!projectName) {
+                this.renderInitialState();
+                return;
+            }
 
-            // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크 (새 프로젝트 제외)
-            if (!Auth.isAdmin && projectName !== '새 프로젝트') {
+            // UI 업데이트
+            if (document.getElementById('activeProjectName')) {
+                document.getElementById('activeProjectName').innerText = projectName;
+            }
+            document.getElementById('appTitle').innerText = projectName;
+
+            // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
+            if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
                     alert(`'${projectName}' 프로젝트에 대한 접근 권한이 없습니다. 관리자에게 승인을 요청하세요.`);
@@ -73,7 +94,6 @@ class GanttApp {
                 .from('tasks')
                 .select('*')
                 .eq('project_name', projectName)
-                .eq('user_id', Auth.user.id) // 로그인한 사용자 데이터만 필터링 추가
                 .order('created_at', { ascending: true });
 
             if (error) throw error;
@@ -83,6 +103,15 @@ class GanttApp {
         } catch (err) {
             console.error('Error loading tasks:', err.message);
         }
+    }
+
+    renderInitialState() {
+        this.tasks = [];
+        if (document.getElementById('activeProjectName')) {
+            document.getElementById('activeProjectName').innerText = '프로젝트를 선택하세요';
+        }
+        document.getElementById('appTitle').innerText = 'Select Project';
+        this.renderAll();
     }
 
     async checkPermission(userId, projectName) {
@@ -203,69 +232,88 @@ class GanttApp {
 
     // --- Project List Management ---
 
-    async fetchProjectList() {
+    async fetchSidebarProjects() {
         try {
-            // DB의 'tasks' 테이블에서 중복 없이 project_name만 가져오기
             const { data, error } = await this.supabase
                 .from('tasks')
                 .select('project_name');
 
             if (error) throw error;
 
-            // 중복 제거 (Set 활용) 및 제목 정렬
-            const uniqueProjects = [...new Set(data.map(item => item.project_name || '제목 없음'))].sort();
-
-            this.renderProjectList(uniqueProjects);
+            const uniqueProjects = [...new Set(data.map(item => item.project_name))].filter(Boolean).sort();
+            this.renderSidebarProjectList(uniqueProjects);
         } catch (err) {
-            console.error('목록 불러오기 실패:', err.message);
+            console.error('Sidebar projects fetch failed:', err.message);
         }
     }
 
-    renderProjectList(projects) {
-        const listContainer = document.getElementById('projectListItems');
+    renderSidebarProjectList(projects) {
+        const listContainer = document.getElementById('sidebarProjectList');
+        if (!listContainer) return;
         listContainer.innerHTML = '';
 
         if (projects.length === 0) {
-            listContainer.innerHTML = '<li class="no-data">저장된 프로젝트가 없습니다.</li>';
+            listContainer.innerHTML = '<div style="padding:10px; font-size:12px; color:#999;">No projects yet</div>';
             return;
         }
 
         projects.forEach(name => {
-            const li = document.createElement('li');
-            li.className = 'project-item';
-            li.style.display = 'flex';
-            li.style.justifyContent = 'space-between';
-            li.style.alignItems = 'center';
-
-            li.innerHTML = `
-                <span class="project-name-link" style="flex-grow: 1; cursor: pointer; padding: 8px 12px; display: flex; align-items: center;">
-                    <i data-lucide="folder" style="width:14px; height:14px; margin-right:8px;"></i>${name}
-                </span>
-                <button class="project-delete-btn" style="background:none; border:none; color:#ff4d4f; cursor:pointer; padding:8px 12px;">
-                    <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
-                </button>
-            `;
-
-            // 이름 클릭 이벤트
-            li.querySelector('.project-name-link').onclick = () => {
-                document.getElementById('appTitle').innerText = name;
-                this.loadTasks();
-                document.getElementById('projectDropdown').classList.add('hidden');
-            };
-
-            // 삭제 버튼 클릭 이벤트
-            li.querySelector('.project-delete-btn').onclick = (e) => {
-                this.deleteProject(name, e);
-            };
-
-            listContainer.appendChild(li);
+            const div = document.createElement('div');
+            div.className = `sidebar-project-item ${this.activeProject === name ? 'active' : ''}`;
+            div.innerHTML = `<i data-lucide="layout"></i> <span>${name}</span>`;
+            div.onclick = () => this.switchProject(name);
+            listContainer.appendChild(div);
         });
-        lucide.createIcons(); // 아이콘 생성
+        lucide.createIcons();
     }
 
-    async deleteProject(projectName, event) {
-        if (event) event.stopPropagation();
+    async switchProject(name) {
+        this.activeProject = name;
+        localStorage.setItem('lastProject', name);
+        await this.loadTasks();
+        const projects = await this.getProjectNames();
+        this.renderSidebarProjectList(projects);
+    }
 
+    async getProjectNames() {
+        const { data } = await this.supabase.from('tasks').select('project_name');
+        return [...new Set(data?.map(item => item.project_name))].filter(Boolean).sort();
+    }
+
+    async createNewProject() {
+        const name = prompt('새 프로젝트 이름을 입력하세요:');
+        if (!name || name.trim() === '') return;
+
+        const projectName = name.trim();
+
+        const newTask = {
+            label: 'New Task',
+            start: new Date().toISOString().split('T')[0],
+            end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            progress: 0,
+            color: '#0073ea',
+            type: 'Task',
+            expanded: true,
+            parentId: null,
+            weekdays: 5,
+            state: 'none',
+            project_name: projectName,
+            user_id: Auth.user.id,
+            description: ''
+        };
+
+        try {
+            const { error } = await this.supabase.from('tasks').insert([newTask]);
+            if (error) throw error;
+
+            await this.fetchSidebarProjects();
+            this.switchProject(projectName);
+        } catch (err) {
+            alert('프로젝트 생성 실패: ' + err.message);
+        }
+    }
+
+    async deleteProject(projectName) {
         if (!Auth.isAdmin) {
             alert("Permission Denied: Only administrators can delete projects.");
             return;
@@ -285,14 +333,13 @@ class GanttApp {
 
             alert(`Project '${projectName}' has been successfully deleted.`);
 
-            const currentTitle = document.getElementById('appTitle').innerText.trim();
-            if (currentTitle === projectName) {
-                document.getElementById('appTitle').innerText = '새 프로젝트';
-                this.tasks = [];
-                this.renderAll();
+            if (this.activeProject === projectName) {
+                this.activeProject = null;
+                localStorage.removeItem('lastProject');
+                this.renderInitialState();
             }
 
-            this.fetchProjectList();
+            this.fetchSidebarProjects();
         } catch (err) {
             console.error('삭제 실패:', err.message);
             alert('삭제 중 오류가 발생했습니다.');
@@ -473,22 +520,14 @@ class GanttApp {
         document.getElementById('nextEnd').onclick = () => this.shiftView('end', 7);
 
         document.getElementById('globalAddTask').onclick = () => this.addNewTask(null);
+        document.getElementById('addNewProjectBtn').onclick = () => this.createNewProject();
 
-        // 프로젝트 목록 드롭다운 관련
-        const projectBtn = document.getElementById('showProjectList');
-        const projectDropdown = document.getElementById('projectDropdown');
-
-        projectBtn.onclick = (e) => {
-            e.stopPropagation(); // 부모로 이벤트 전파 방지
-            projectDropdown.classList.toggle('hidden');
-            if (!projectDropdown.classList.contains('hidden')) {
-                this.fetchProjectList(); // 열릴 때마다 최신 목록 가져오기
-            }
-        };
-
-        // 제목 편집이 끝났을 때(Blur) 자동으로 해당 프로젝트 데이터 로드
+        // 제목 편집이 끝났을 때(Blur) 자동으로 해당 프로젝트 데이터 로드 (필요시)
         document.getElementById('appTitle').addEventListener('blur', () => {
-            this.loadTasks();
+            const newName = document.getElementById('appTitle').innerText.trim();
+            if (this.activeProject !== newName && newName !== '') {
+                this.switchProject(newName);
+            }
         });
 
         // 엔터 키를 눌렀을 때도 저장 및 로드
@@ -500,9 +539,11 @@ class GanttApp {
         });
 
         // 외부(전역) 클릭 시 닫기
-        window.addEventListener('click', () => {
-            projectDropdown.classList.add('hidden');
-            if (!document.getElementById('contextMenu').contains(event.target)) {
+        window.addEventListener('click', (e) => {
+            if (document.getElementById('projectDropdown')) {
+                document.getElementById('projectDropdown').classList.add('hidden');
+            }
+            if (!document.getElementById('contextMenu').contains(e.target)) {
                 this.hideContextMenu();
             }
         });
