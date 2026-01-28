@@ -45,16 +45,33 @@ body {
 
 /* --- Header Section --- */
 .main-header {
-    height: var(--header-height);
+    height: 56px !important;
     background-color: var(--bg-white);
     border-bottom: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 16px;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0 16px !important;
     /* Reduced from 24px */
     z-index: 100;
     flex-wrap: nowrap !important;
+    width: 100% !important;
+    min-width: 1000px !important;
+    overflow: hidden !important;
+}
+
+.header-right {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    /* Extremely reduced gap */
+    margin-left: auto !important;
+    align-items: center !important;
+}
+
+.header-right>* {
+    flex-shrink: 0 !important;
+    /* Prevent shrinking/wrapping */
 }
 
 .header-left {
@@ -116,18 +133,19 @@ body {
     align-items: center;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: 0 8px;
-    /* Reduced padding */
+    padding: 0 6px;
     background: var(--bg-white);
-    width: 140px;
+    width: 120px !important;
+    /* Forced narrow width */
     /* Reduced from 200px */
     transition: width 0.2s ease;
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
 }
 
 .search-bar:focus-within {
     border-color: var(--primary-color);
-    width: 240px;
+    width: 120px !important;
+    /* Animation removed */
 }
 
 .search-bar input {
@@ -150,15 +168,17 @@ body {
     border-radius: 4px;
     overflow: hidden;
     background: var(--bg-white);
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
+    padding: 0 2px !important;
+    /* Minimal padding */
 }
 
 .current-period {
-    padding: 0 6px;
+    padding: 0 4px;
     /* Reduced from 10px */
-    font-size: 11px;
+    font-size: 12px !important;
     /* Slightly smaller */
-    min-width: 80px;
+    min-width: 75px;
     /* Reduced from 90px */
     text-align: center;
     border-left: 1px solid var(--border-color);
