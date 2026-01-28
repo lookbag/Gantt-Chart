@@ -896,14 +896,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /**
  * [관리자 전용] 회원 리스트를 불러와 테이블에 렌더링합니다.
- * (수정됨: 프로젝트명을 직접 입력하는 대신, DB의 tasks 테이블에서 프로젝트 목록을 가져와 선택하도록 변경)
+ * (디자인 수정: 테이블 셀 여백 확대, 버튼/드롭다운 크기 및 간격 조정)
  */
 async function renderUserList() {
     const tableBody = document.getElementById('adminUserTableBody');
     if (!tableBody) return;
 
     try {
-        // [1] 사용자 리스트와 프로젝트 목록을 동시에 가져옵니다 (병렬 처리)
         const [usersResult, projectsResult] = await Promise.all([
             window.app.supabase
                 .from('profiles')
@@ -911,7 +910,7 @@ async function renderUserList() {
                 .order('display_name', { ascending: true }),
             window.app.supabase
                 .from('tasks')
-                .select('project_name') // 프로젝트 명만 가져옴
+                .select('project_name')
         ]);
 
         const users = usersResult.data;
@@ -920,13 +919,10 @@ async function renderUserList() {
         if (usersResult.error) throw usersResult.error;
         if (projectsResult.error) throw projectsResult.error;
 
-        // [2] 프로젝트 목록 중복 제거 및 정렬
-        // (Set을 사용하여 중복을 없애고, 빈 이름은 제외한 뒤 가나다순 정렬)
         const uniqueProjects = [...new Set(projectData.map(item => item.project_name))]
             .filter(name => name && name.trim() !== '')
             .sort();
 
-        // [3] 드롭다운(Select) 옵션 HTML 생성
         let projectOptions = '<option value="">프로젝트 선택</option>';
         if (uniqueProjects.length > 0) {
             projectOptions += uniqueProjects.map(name => `<option value="${name}">${name}</option>`).join('');
@@ -935,25 +931,41 @@ async function renderUserList() {
         }
 
         if (!users || users.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;">가입된 회원이 없습니다.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 20px;">가입된 회원이 없습니다.</td></tr>';
             return;
         }
 
-        // [4] 테이블 렌더링 (Input -> Select 로 변경)
+        // [디자인 개선 포인트]
+        // 1. td 스타일에 padding: 14px 추가 -> 줄 간격 확보
+        // 2. flex gap: 10px -> 요소 사이 간격 확보
+        // 3. select/button padding 및 height 증가 -> 클릭 편의성 증대
         tableBody.innerHTML = users.map(user => `
-            <tr>
-                <td>${user.display_name || user.full_name || '이름 없음'}</td>
-                <td>${user.email}</td>
-                <td>
-                    <div style="display: flex; gap: 5px; align-items: center;">
-                        <select id="proj-${user.id}" style="width:120px; padding:4px; border:1px solid #ccc; border-radius:4px;">
+            <tr style="border-bottom: 1px solid #f0f0f0;">
+                <td style="padding: 14px 12px; vertical-align: middle;">
+                    <span style="font-weight: 500;">${user.display_name || user.full_name || '이름 없음'}</span>
+                </td>
+                <td style="padding: 14px 12px; vertical-align: middle; color: #666;">
+                    ${user.email}
+                </td>
+                <td style="padding: 14px 12px; vertical-align: middle;">
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <select id="proj-${user.id}" 
+                                style="width: 160px; padding: 6px 10px; border: 1px solid #e0e2e7; border-radius: 4px; height: 36px; background-color: #fff; cursor: pointer; font-size: 13px;">
                             ${projectOptions}
                         </select>
                         
-                        <button onclick="executeGrantPermission('${user.id}', 'read')" 
-                                style="background-color: #00c875; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">읽기</button>
-                        <button onclick="executeGrantPermission('${user.id}', 'write')" 
-                                style="background-color: #0073ea; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">쓰기</button>
+                        <div style="display: flex; gap: 6px;">
+                            <button onclick="executeGrantPermission('${user.id}', 'read')" 
+                                    style="background-color: #00c875; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                                읽기
+                            </button>
+                            <button onclick="executeGrantPermission('${user.id}', 'write')" 
+                                    style="background-color: #0073ea; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                                쓰기
+                            </button>
+                        </div>
                     </div>
                 </td>
             </tr>
@@ -961,7 +973,7 @@ async function renderUserList() {
 
     } catch (err) {
         console.error('관리자 데이터 로드 실패:', err.message);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:red; text-align:center;">로드 실패: ${err.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:red; text-align:center; padding: 20px;">로드 실패: ${err.message}</td></tr>`;
     }
 }
 
