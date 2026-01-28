@@ -22,7 +22,7 @@
             <div class="header-left">
                 <button class="menu-toggle"><i data-lucide="layout-grid"></i></button>
                 <div style="position: relative; display: flex; align-items: center; gap: 8px;">
-                    <h1 class="logo" contenteditable="true" spellcheck="false" id="appTitle">생산관리</h1>
+                    <h1 class="logo" contenteditable="true" spellcheck="false" id="appTitle">Project</h1>
                     <button class="icon-btn" id="showProjectList"><i data-lucide="chevron-down"></i></button>
 
                     <div id="projectDropdown" class="context-menu hidden" style="top: 40px; left: 0; width: 200px;">
@@ -70,9 +70,24 @@
         <main class="main-content">
             <!-- Left Panel: Tree Grid -->
             <aside class="sidebar-panel">
+                <!-- Monday style Project Explorer -->
+                <div class="project-navigation">
+                    <div class="nav-header">
+                        <span>Workspaces</span>
+                        <button class="icon-btn" id="addNewProjectBtn" title="New Project"><i
+                                data-lucide="plus"></i></button>
+                    </div>
+                    <div id="sidebarProjectList" class="project-list-sidebar">
+                        <!-- Dynamic Project Items -->
+                    </div>
+                </div>
+
                 <div class="panel-header">
-                    <button class="icon-btn back-btn"><i data-lucide="chevron-left"></i></button>
-                    <button class="add-task-btn" id="globalAddTask"><i data-lucide="plus"></i></button>
+                    <div class="active-project-info">
+                        <i data-lucide="layout"></i>
+                        <span id="activeProjectName">Select a Project</span>
+                    </div>
+                    <button class="add-task-btn" id="globalAddTask" title="Add Item"><i data-lucide="plus"></i></button>
                 </div>
                 <div id="treeGrid" class="tree-grid">
                     <!-- Dynamic Tree Items -->
