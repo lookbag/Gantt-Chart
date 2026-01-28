@@ -11,8 +11,25 @@ const Auth = {
 
     async init() {
         this.bindEvents();
-        await this.checkSession();
-        this.handlePasswordResetFlow();
+
+        // Supabase 인증 상태 변화 감지 (비밀번호 재설정 이벤트 포착용)
+        authSuppabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                this.showResetForm(); // 재설정 모드면 강제로 폼 표시
+            } else if (event === 'SIGNED_IN' && session) {
+                this.handleAuthStateChange(session.user);
+            } else if (event === 'SIGNED_OUT') {
+                // 로그아웃 시 처리
+            }
+        });
+
+        // 초기 세션 체크 (기존 로직 유지하되, 리스너가 처리하므로 중복 방지)
+        const { data: { session } } = await authSuppabase.auth.getSession();
+        if (session && !window.location.hash.includes('type=recovery')) {
+            this.handleAuthStateChange(session.user);
+        } else if (!session) {
+            this.showAuthModal();
+        }
     },
 
     bindEvents() {
@@ -41,21 +58,7 @@ const Auth = {
         document.getElementById('resetSubmit').onclick = () => this.updatePassword();
     },
 
-    async checkSession() {
-        const { data: { user }, error } = await authSuppabase.auth.getUser();
-        if (user) {
-            this.handleAuthStateChange(user);
-        } else {
-            this.showAuthModal();
-        }
-    },
 
-    handlePasswordResetFlow() {
-        // Supabase sends a recovery hash in the URL after clicking the reset link
-        if (window.location.hash && window.location.hash.includes('type=recovery')) {
-            this.showResetForm();
-        }
-    },
 
     showAuthModal() {
         document.getElementById('authModal').classList.remove('hidden');
@@ -221,9 +224,12 @@ const Auth = {
     async handleAuthStateChange(user) {
         this.user = user;
         this.isLoggedIn = true;
-        this.isAdmin = user.email === 'csyoon@kbautosys.com';
+        this.isAdmin = user.email === 'csyoon@kbautosys.com'; // 관리자 이메일 확인
 
-        document.getElementById('authModal').classList.add('hidden');
+        // [수정된 부분] 비밀번호 재설정 중이 아닐 때만 모달을 닫음
+        if (!window.location.hash.includes('type=recovery')) {
+            document.getElementById('authModal').classList.add('hidden');
+        }
         document.getElementById('userAvatar').innerText = user.user_metadata.full_name?.charAt(0) || user.email.charAt(0).toUpperCase();
         document.getElementById('userAvatar').title = `${user.user_metadata.full_name || 'User'} (${user.email})`;
 
