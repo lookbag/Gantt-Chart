@@ -36,7 +36,6 @@ class GanttApp {
         this.setupRealtime();
 
         if (Auth.isLoggedIn) {
-            await this.fetchSidebarProjects();
             if (this.activeProject) {
                 this.loadTasks();
             } else {
@@ -232,7 +231,7 @@ class GanttApp {
 
     // --- Project List Management ---
 
-    async fetchSidebarProjects() {
+    async fetchProjectList() {
         try {
             const { data, error } = await this.supabase
                 .from('tasks')
@@ -241,28 +240,55 @@ class GanttApp {
             if (error) throw error;
 
             const uniqueProjects = [...new Set(data.map(item => item.project_name))].filter(Boolean).sort();
-            this.renderSidebarProjectList(uniqueProjects);
+            this.renderProjectDropdown(uniqueProjects);
         } catch (err) {
-            console.error('Sidebar projects fetch failed:', err.message);
+            console.error('Project list fetch failed:', err.message);
         }
     }
 
-    renderSidebarProjectList(projects) {
-        const listContainer = document.getElementById('sidebarProjectList');
+    renderProjectDropdown(projects) {
+        const listContainer = document.getElementById('projectListItems');
         if (!listContainer) return;
         listContainer.innerHTML = '';
 
         if (projects.length === 0) {
-            listContainer.innerHTML = '<div style="padding:10px; font-size:12px; color:#999;">No projects yet</div>';
+            listContainer.innerHTML = '<li style="padding:10px; font-size:12px; color:#999;">No projects yet</li>';
             return;
         }
 
         projects.forEach(name => {
-            const div = document.createElement('div');
-            div.className = `sidebar-project-item ${this.activeProject === name ? 'active' : ''}`;
-            div.innerHTML = `<i data-lucide="layout"></i> <span>${name}</span>`;
-            div.onclick = () => this.switchProject(name);
-            listContainer.appendChild(div);
+            const li = document.createElement('li');
+            li.style.display = 'flex';
+            li.style.justifyContent = 'space-between';
+            li.style.alignItems = 'center';
+            li.style.padding = '4px 8px';
+            li.className = this.activeProject === name ? 'active-project-item' : '';
+
+            li.innerHTML = `
+                <span class="project-name-link" style="flex-grow: 1; cursor: pointer; padding: 4px; display: flex; align-items: center; gap: 8px;">
+                    <i data-lucide="layout" style="width:14px;"></i> ${name}
+                </span>
+                ${Auth.isAdmin ? `
+                <button class="project-delete-btn" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:4px;">
+                    <i data-lucide="trash-2" style="width:14px;"></i>
+                </button>` : ''}
+            `;
+
+            li.querySelector('.project-name-link').onclick = (e) => {
+                e.stopPropagation();
+                this.switchProject(name);
+                document.getElementById('projectDropdown').classList.add('hidden');
+            };
+
+            const deleteBtn = li.querySelector('.project-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteProject(name);
+                };
+            }
+
+            listContainer.appendChild(li);
         });
         lucide.createIcons();
     }
@@ -271,13 +297,6 @@ class GanttApp {
         this.activeProject = name;
         localStorage.setItem('lastProject', name);
         await this.loadTasks();
-        const projects = await this.getProjectNames();
-        this.renderSidebarProjectList(projects);
-    }
-
-    async getProjectNames() {
-        const { data } = await this.supabase.from('tasks').select('project_name');
-        return [...new Set(data?.map(item => item.project_name))].filter(Boolean).sort();
     }
 
     async createNewProject() {
@@ -306,8 +325,8 @@ class GanttApp {
             const { error } = await this.supabase.from('tasks').insert([newTask]);
             if (error) throw error;
 
-            await this.fetchSidebarProjects();
             this.switchProject(projectName);
+            this.fetchProjectList();
         } catch (err) {
             alert('프로젝트 생성 실패: ' + err.message);
         }
@@ -315,11 +334,11 @@ class GanttApp {
 
     async deleteProject(projectName) {
         if (!Auth.isAdmin) {
-            alert("Permission Denied: Only administrators can delete projects.");
+            alert("관리자만 프로젝트를 삭제할 수 있습니다.");
             return;
         }
 
-        if (!confirm(`Warning: All data related to the project '${projectName}' will be permanently deleted. Are you sure you want to proceed?`)) {
+        if (!confirm(`'${projectName}' 프로젝트의 모든 데이터가 영구 삭제됩니다. 계속하시겠습니까?`)) {
             return;
         }
 
@@ -331,7 +350,7 @@ class GanttApp {
 
             if (error) throw error;
 
-            alert(`Project '${projectName}' has been successfully deleted.`);
+            alert(`'${projectName}' 프로젝트가 삭제되었습니다.`);
 
             if (this.activeProject === projectName) {
                 this.activeProject = null;
@@ -339,9 +358,9 @@ class GanttApp {
                 this.renderInitialState();
             }
 
-            this.fetchSidebarProjects();
+            this.fetchProjectList();
         } catch (err) {
-            console.error('삭제 실패:', err.message);
+            console.error('Project deletion failed:', err.message);
             alert('삭제 중 오류가 발생했습니다.');
         }
     }
@@ -520,10 +539,35 @@ class GanttApp {
         document.getElementById('nextEnd').onclick = () => this.shiftView('end', 7);
 
         document.getElementById('globalAddTask').onclick = () => this.addNewTask(null);
-        document.getElementById('addNewProjectBtn').onclick = () => this.createNewProject();
+        document.getElementById('headerNewProjectBtn').onclick = () => this.createNewProject();
 
-        // 제목 편집이 끝났을 때(Blur) 자동으로 해당 프로젝트 데이터 로드 (필요시)
-        document.getElementById('appTitle').addEventListener('blur', () => {
+        // 프로젝트 목록 드롭다운 관련
+        const projectBtn = document.getElementById('showProjectList');
+        const projectDropdown = document.getElementById('projectDropdown');
+        const appTitle = document.getElementById('appTitle');
+
+        const toggleDropdown = (e) => {
+            e.stopPropagation();
+            const isHidden = projectDropdown.classList.contains('hidden');
+            if (isHidden) {
+                projectDropdown.classList.remove('hidden');
+                this.fetchProjectList();
+            } else {
+                projectDropdown.classList.add('hidden');
+            }
+        };
+
+        projectBtn.onclick = toggleDropdown;
+
+        // 제목 클릭 시에도 드롭다운 (편집 중이 아닐 때)
+        appTitle.onclick = (e) => {
+            if (document.activeElement !== appTitle) {
+                toggleDropdown(e);
+            }
+        };
+
+        // 제목 편집 가능하게 유지
+        appTitle.addEventListener('blur', () => {
             const newName = document.getElementById('appTitle').innerText.trim();
             if (this.activeProject !== newName && newName !== '') {
                 this.switchProject(newName);
