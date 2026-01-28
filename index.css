@@ -774,3 +774,32 @@ input[type="range"]::-webkit-slider-thumb {
     background-color: #0061c2;
     /* 호버 시 약간 진하게 */
 }
+
+/* [Add-on] Monday.com Style Color Palette */
+.monday-color-palette {
+    display: flex;
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    /* 동그라미 모양 */
+    cursor: pointer;
+    border: 2px solid transparent;
+    /* 선택 시 테두리 공간 확보 */
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.selected {
+    border-color: #333;
+    /* 선택되었을 때 검은 테두리 */
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 1) inset;
+    /* 안쪽 흰색 테두리 효과 */
+}

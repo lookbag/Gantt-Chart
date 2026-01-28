@@ -859,9 +859,12 @@ class GanttApp {
         document.getElementById('editTaskProgress').value = task.progress;
         document.getElementById('progressValue').innerText = `${task.progress}%`;
         document.getElementById('editTaskType').value = task.type;
-        document.getElementById('editTaskColor').style.backgroundColor = task.color;
         document.getElementById('editTaskState').value = task.state;
-        document.getElementById('editTaskDescription').value = task.description || ''; // 설명 로드
+        document.getElementById('editTaskDescription').value = task.description || '';
+
+        // [New] 컬러 팔레트 생성 함수 호출
+        generateColorPalette(task.color);
+
         document.getElementById('editModal').classList.remove('hidden');
     }
 
@@ -873,6 +876,7 @@ class GanttApp {
     async saveTask() {
         if (!this.editingTaskId) return;
         const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
+
         task.label = document.getElementById('editTaskLabel').value;
         task.start = document.getElementById('editTaskStart').value;
         task.end = document.getElementById('editTaskEnd').value;
@@ -880,7 +884,13 @@ class GanttApp {
         task.progress = parseInt(document.getElementById('editTaskProgress').value);
         task.type = document.getElementById('editTaskType').value;
         task.state = document.getElementById('editTaskState').value;
-        task.description = document.getElementById('editTaskDescription').value; // 설명 저장
+        task.description = document.getElementById('editTaskDescription').value;
+
+        // [New] 선택된 컬러 값을 가져와서 저장
+        const selectedColor = document.getElementById('editTaskColorValue').value;
+        if (selectedColor) {
+            task.color = selectedColor;
+        }
 
         await this.syncTask(task);
         this.renderAll();
@@ -1001,4 +1011,55 @@ async function executeGrantPermission(userId) {
         console.error('Permission Error:', err.message);
         alert('Error granting permission: ' + err.message);
     }
+}
+
+// --- [Color Logic Add-on] Monday.com Palette ---
+
+// Monday.com Tones (Red, Orange, Yellow, Green, Blue, Indigo, Violet)
+const MONDAY_COLORS = [
+    '#E2445C', // Red
+    '#FF9F00', // Orange
+    '#FFCB00', // Yellow
+    '#00C875', // Green
+    '#0073EA', // Blue
+    '#579BFC', // Indigo (Dark Blue)
+    '#A25DDC'  // Violet (Purple)
+];
+
+/**
+ * 7가지 색상 팔레트를 생성하고 클릭 이벤트를 연결하는 함수
+ */
+function generateColorPalette(selectedColor) {
+    const container = document.getElementById('colorPalette');
+    const hiddenInput = document.getElementById('editTaskColorValue');
+
+    if (!container || !hiddenInput) return;
+
+    container.innerHTML = ''; // 초기화
+
+    // 기본값이 없거나 이상하면 파란색(#0073EA)을 기본으로
+    if (!selectedColor || !MONDAY_COLORS.includes(selectedColor)) {
+        selectedColor = '#0073EA';
+    }
+    hiddenInput.value = selectedColor;
+
+    MONDAY_COLORS.forEach(color => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = color;
+
+        if (color === selectedColor) {
+            swatch.classList.add('selected');
+        }
+
+        // 색상 클릭 이벤트
+        swatch.onclick = () => {
+            // 모든 선택 해제 후 현재 클릭한 것만 선택
+            document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+            swatch.classList.add('selected');
+            hiddenInput.value = color; // 숨겨진 input에 값 저장
+        };
+
+        container.appendChild(swatch);
+    });
 }
