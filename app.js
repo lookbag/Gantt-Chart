@@ -82,7 +82,7 @@ class GanttApp {
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    alert(`'${projectName}' 프로젝트에 대한 접근 권한이 없습니다. 관리자에게 승인을 요청하세요.`);
+                    alert(`You do not have access to the '${projectName}' project. Please request approval from the administrator.`);
                     this.tasks = [];
                     this.renderAll();
                     return;
@@ -107,10 +107,17 @@ class GanttApp {
     renderInitialState() {
         this.tasks = [];
         if (document.getElementById('activeProjectName')) {
-            document.getElementById('activeProjectName').innerText = '프로젝트를 선택하세요';
+            document.getElementById('activeProjectName').innerText = 'No Authorized Projects';
         }
-        document.getElementById('appTitle').innerText = 'Select Project';
-        this.renderAll();
+        document.getElementById('appTitle').innerText = 'Project Planner';
+        const body = document.getElementById('ganttBody');
+        if (body) {
+            body.innerHTML = '<div style="padding: 100px; text-align: center; color: #676879; font-size: 16px;">' +
+                '<i data-lucide="shield-alert" style="margin-bottom: 16px;"></i><br>' +
+                'You have no active projects yet.<br>Please contact the administrator to request project access.' +
+                '</div>';
+            lucide.createIcons();
+        }
     }
 
     async checkPermission(userId, projectName) {

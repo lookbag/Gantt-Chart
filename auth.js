@@ -24,6 +24,16 @@ const Auth = {
         document.getElementById('closeAdmin').onclick = () => document.getElementById('adminModal').classList.add('hidden');
         document.getElementById('approveBtn').onclick = () => this.approveUser();
 
+        // OTP helpers
+        if (document.getElementById('resendOtp')) {
+            document.getElementById('resendOtp').onclick = () => {
+                alert("If you haven't received the code, please try signing up again or contact admin.");
+            };
+        }
+        if (document.getElementById('cancelOtp')) {
+            document.getElementById('cancelOtp').onclick = () => this.showLoginForm();
+        }
+
         // Password Reset Events
         document.getElementById('openForgotPass').onclick = () => this.showForgotForm();
         document.getElementById('backToLogin').onclick = () => this.showLoginForm();
@@ -124,7 +134,7 @@ const Auth = {
             // Show OTP section
             document.getElementById('loginForm').classList.add('hidden');
             document.getElementById('otpSection').classList.remove('hidden');
-            alert("Please check your inbox for the verification code.");
+            document.getElementById('authSubtitle').innerText = 'Check Your Email';
         } catch (err) {
             alert("Sign up failed: " + err.message);
         }

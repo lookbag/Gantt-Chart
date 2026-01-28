@@ -201,7 +201,7 @@
         <div id="authModal" class="modal-overlay hidden">
             <div class="modal-content auth-modal">
                 <div class="auth-header">
-                    <img src="https://www.kbautosys.com/img/common/logo.png" alt="KB Autosys" class="auth-logo">
+                    <img src="https://www.kbautosys.com/img/common/logo.png" alt="KB Autosys" class="auth-box-logo">
                     <h2>Project Planner</h2>
                     <p id="authSubtitle">Please log in with your company email</p>
                 </div>
@@ -230,8 +230,7 @@
                 </div>
 
                 <div id="forgotPassForm" class="hidden">
-                    <p style="margin-bottom: 20px; font-size: 14px; color: #666;">We will send a password reset link to
-                        your registered company email.</p>
+                    <p class="auth-instruction">We will send a password reset link to your registered company email.</p>
                     <div class="form-group">
                         <label>Account ID</label>
                         <div class="email-input-group">
@@ -244,7 +243,7 @@
                 </div>
 
                 <div id="resetPassForm" class="hidden">
-                    <p style="margin-bottom: 20px; font-size: 14px; color: #333;">Please enter your new password.</p>
+                    <p class="auth-instruction">Please enter your new password.</p>
                     <div class="form-group">
                         <label>New Password</label>
                         <input type="password" id="newPassword" placeholder="••••••••">
@@ -255,12 +254,15 @@
                 <div id="otpSection" class="hidden">
                     <div class="otp-instruction">
                         <i data-lucide="mail"></i>
-                        <p>Please enter the <strong>6-digit verification code</strong> sent to your email.</p>
+                        <p>Click the <strong>verification link</strong> in your email <br>or enter the <strong>6-digit
+                                code</strong> below.</p>
                     </div>
                     <div class="form-group">
                         <input type="text" id="otpToken" placeholder="000000" maxlength="6" class="otp-input">
                     </div>
                     <button class="auth-submit-btn" id="otpSubmit">Verify & Sign Up</button>
+                    <p class="auth-toggle"><span id="resendOtp">Resend Code</span> | <span id="cancelOtp">Back</span>
+                    </p>
                 </div>
             </div>
         </div>
