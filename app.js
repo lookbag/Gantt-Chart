@@ -893,52 +893,55 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Member Management Add-on ---
-async function renderUserList() {
-    const listContainer = document.querySelector('.admin-list-container');
-    if (!listContainer) return;
-    listContainer.innerHTML = 'Loading...';
+async function fetchUserList() {
+    // 1. 현재 로그인한 유저가 Admin인지 확인
+    const { data: { user } } = await window.app.supabase.auth.getUser();
+    const { data: profile } = await window.app.supabase.from('profiles').select('is_admin').eq('id', user.id).single();
 
-    // Using app's supabase client
-    const { data: users, error } = await window.app.supabase.from('profiles').select('*');
-
-    if (error) {
-        console.error('Error fetching users:', error);
-        listContainer.innerHTML = 'Error loading users.';
+    if (!profile?.is_admin) {
+        alert("관리자 권한이 없습니다.");
         return;
     }
 
-    let html = '<table class="admin-table"><tr><th>이름</th><th>이메일</th><th>프로젝트 권한 설정</th></tr>';
-    users.forEach(user => {
-        html += `
+    // 2. 전체 사용자 리스트 가져오기
+    const { data: users, error } = await window.app.supabase.from('profiles').select('*');
+    const tableBody = document.querySelector('.user-list-body');
+
+    if (error) {
+        console.error('Error fetching users:', error);
+        return;
+    }
+
+    if (users) {
+        tableBody.innerHTML = users.map(u => `
             <tr>
-                <td>${user.display_name || '이름 없음'}</td>
-                <td>${user.email}</td>
+                <td>${u.display_name || '이름 없음'}</td>
+                <td>${u.email}</td>
                 <td>
-                    <input type="text" placeholder="프로젝트명" id="proj-${user.id}" style="width:100px; padding:4px;">
-                    <button onclick="grantPermission('${user.id}', 'read')">읽기</button>
-                    <button onclick="grantPermission('${user.id}', 'write')">쓰기</button>
+                    <select id="proj-${u.id}" style="padding:4px; border-radius:4px; border:1px solid #ddd;">
+                        <option value="생산관리">생산관리</option>
+                        <option value="영업관리">영업관리</option>
+                    </select>
+                    <button onclick="handleGrant('${u.id}', 'read')" style="background-color:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">읽기</button>
+                    <button onclick="handleGrant('${u.id}', 'write')" style="background-color:#28a745; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">쓰기</button>
                 </td>
-            </tr>`;
-    });
-    html += '</table>';
-    listContainer.innerHTML = html;
+            </tr>
+        `).join('');
+    }
 }
 
-async function grantPermission(userId, type) {
+async function handleGrant(userId, type) {
     const projectName = document.getElementById(`proj-${userId}`).value;
-    if (!projectName) return alert('프로젝트명을 입력하세요.');
-
-    const upsertData = {
-        user_id: userId,
-        project_name: projectName,
-        can_read: type === 'read' || type === 'write',
-        can_write: type === 'write'
-    };
 
     const { error } = await window.app.supabase
         .from('project_permissions')
-        .upsert(upsertData, { onConflict: 'user_id, project_name' });
+        .upsert({
+            user_id: userId,
+            project_name: projectName,
+            can_read: true,
+            can_write: type === 'write'
+        }, { onConflict: 'user_id, project_name' });
 
-    if (error) alert('권한 부여 실패: ' + error.message);
-    else alert(`${projectName} 프로젝트에 대한 ${type} 권한이 부여되었습니다.`);
+    if (!error) alert(`${projectName} 권한 부여 완료!`);
+    else alert("오류 발생: " + error.message);
 }
