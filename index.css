@@ -51,8 +51,10 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 24px;
+    padding: 0 16px;
+    /* Reduced from 24px */
     z-index: 100;
+    flex-wrap: nowrap !important;
 }
 
 .header-left {
@@ -103,7 +105,10 @@ body {
 .timeline-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    /* Reduced from 8px */
+    flex-shrink: 0;
+    flex-wrap: nowrap !important;
 }
 
 .search-bar {
@@ -111,10 +116,13 @@ body {
     align-items: center;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 0 8px;
+    /* Reduced padding */
     background: var(--bg-white);
-    width: 200px;
+    width: 140px;
+    /* Reduced from 200px */
     transition: width 0.2s ease;
+    flex-shrink: 0;
 }
 
 .search-bar:focus-within {
@@ -142,12 +150,16 @@ body {
     border-radius: 4px;
     overflow: hidden;
     background: var(--bg-white);
+    flex-shrink: 0;
 }
 
 .current-period {
-    padding: 0 10px;
-    font-size: 12px;
-    min-width: 90px;
+    padding: 0 6px;
+    /* Reduced from 10px */
+    font-size: 11px;
+    /* Slightly smaller */
+    min-width: 80px;
+    /* Reduced from 90px */
     text-align: center;
     border-left: 1px solid var(--border-color);
     border-right: 1px solid var(--border-color);
@@ -179,7 +191,9 @@ body {
 .auth-status-container {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    /* Reduced from 12px */
+    flex-shrink: 0;
 }
 
 .user-avatar {
