@@ -234,8 +234,8 @@ const Auth = {
 
     async showAdminModal() {
         document.getElementById('adminModal').classList.remove('hidden');
-        if (typeof fetchUserList === 'function') {
-            fetchUserList();
+        if (typeof renderUserList === 'function') {
+            renderUserList();
         }
     },
 
