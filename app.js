@@ -895,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Member Management Add-on ---
 
 /**
- * [Admin Only] Render User List with English UI & Spacious Padding
+ * [Admin Only] Render User List with Wider Layout & Single Action Button
  */
 async function renderUserList() {
     const tableBody = document.getElementById('adminUserTableBody');
@@ -927,46 +927,35 @@ async function renderUserList() {
         if (uniqueProjects.length > 0) {
             projectOptions += uniqueProjects.map(name => `<option value="${name}">${name}</option>`).join('');
         } else {
-            projectOptions += '<option value="" disabled>No active projects</option>';
+            projectOptions += '<option value="" disabled>No projects available</option>';
         }
 
         if (!users || users.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px;">No registered members found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px; color: #666;">No registered members found.</td></tr>';
             return;
         }
 
         // [Design Update]
-        // 1. Padding: 16px (Top/Bottom) 24px (Left/Right) -> Adds significant breathing room
-        // 2. Language: All text converted to English
+        // 1. Single Button: "Grant Access" (Grants both Read & Write)
+        // 2. Padding: Optimized for 900px width
         tableBody.innerHTML = users.map(user => `
             <tr style="border-bottom: 1px solid #f0f0f0;">
                 <td style="padding: 16px 24px; vertical-align: middle;">
-                    <span style="font-weight: 500;">${user.display_name || user.full_name || 'No Name'}</span>
+                    <span style="font-weight: 600; font-size: 14px; color: #333;">${user.display_name || user.full_name || 'No Name'}</span>
                 </td>
-                <td style="padding: 16px 24px; vertical-align: middle; color: #666;">
+                <td style="padding: 16px 24px; vertical-align: middle; color: #666; font-size: 13px;">
                     ${user.email}
                 </td>
                 <td style="padding: 16px 24px; vertical-align: middle;">
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <select id="proj-${user.id}" 
-                                style="width: 160px; padding: 6px 10px; border: 1px solid #e0e2e7; border-radius: 4px; height: 36px; background-color: #fff; cursor: pointer; font-size: 13px;">
+                                style="flex: 1; padding: 0 12px; border: 1px solid #e0e2e7; border-radius: 4px; height: 38px; background-color: #fff; cursor: pointer; font-size: 13px;">
                             ${projectOptions}
                         </select>
                         
-                        <div style="display: flex; gap: 6px;">
-                            <button onclick="executeGrantPermission('${user.id}', 'read')" 
-                                    style="background-color: #00c875; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
-                                    title="Grant Read-Only Access"
-                                    onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                                Read
-                            </button>
-                            <button onclick="executeGrantPermission('${user.id}', 'write')" 
-                                    style="background-color: #0073ea; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
-                                    title="Grant Write Access"
-                                    onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                                Write
-                            </button>
-                        </div>
+                        <button onclick="executeGrantPermission('${user.id}')" class="grant-btn">
+                            Grant
+                        </button>
                     </div>
                 </td>
             </tr>
@@ -974,42 +963,42 @@ async function renderUserList() {
 
     } catch (err) {
         console.error('Failed to load admin data:', err.message);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:var(--danger-color); text-align:center; padding: 20px;">Load Failed: ${err.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:#e2445c; text-align:center; padding: 20px;">Load Failed: ${err.message}</td></tr>`;
     }
 }
 
 /**
- * [관리자 전용] 특정 사용자에게 프로젝트 권한을 부여합니다.
- * (HTML이 Select로 바뀌어도 .value로 값을 가져오는 방식은 동일하므로 로직 수정 없음)
+ * [Admin Only] Grant Full Access (Read + Write)
+ * Simplified Logic: One button grants full permissions for the selected project.
  */
-async function executeGrantPermission(userId, type) {
+async function executeGrantPermission(userId) {
     const projInput = document.getElementById(`proj-${userId}`);
     const projectName = projInput ? projInput.value.trim() : "";
 
     if (!projectName) {
-        alert('권한을 부여할 프로젝트를 선택해주세요.');
+        alert('Please select a project first.');
         return;
     }
 
     try {
+        // Grant FULL access (Read: true, Write: true)
         const upsertData = {
             user_id: userId,
             project_name: projectName,
-            is_approved: true, // 로그인 허용 여부
-            can_read: true,    // '읽기'나 '쓰기' 모두 읽기는 가능
-            can_write: (type === 'write')
+            is_approved: true,
+            can_read: true,
+            can_write: true // Always give write access when granting
         };
 
-        // user_permissions 테이블에 데이터 저장 (upsert로 중복 방지)
         const { error } = await window.app.supabase
             .from('user_permissions')
             .upsert(upsertData, { onConflict: 'user_id, project_name' });
 
         if (error) throw error;
 
-        alert(`[${projectName}] 프로젝트에 대한 ${type === 'write' ? '쓰기' : '읽기'} 권한을 부여했습니다.`);
+        alert(`Successfully granted access to project: [${projectName}]`);
     } catch (err) {
-        console.error('권한 부여 에러:', err.message);
-        alert('권한 부여 중 오류가 발생했습니다: ' + err.message);
+        console.error('Permission Error:', err.message);
+        alert('Error granting permission: ' + err.message);
     }
 }
