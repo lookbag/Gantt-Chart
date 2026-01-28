@@ -893,52 +893,110 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Member Management Add-on ---
+
+/**
+ * [관리자 전용] 회원 리스트를 불러와 테이블에 렌더링합니다.
+ * (수정됨: 프로젝트명을 직접 입력하는 대신, DB의 tasks 테이블에서 프로젝트 목록을 가져와 선택하도록 변경)
+ */
 async function renderUserList() {
-    const listContainer = document.querySelector('.admin-list-container');
-    if (!listContainer) return;
-    listContainer.innerHTML = 'Loading...';
+    const tableBody = document.getElementById('adminUserTableBody');
+    if (!tableBody) return;
 
-    // Using app's supabase client
-    const { data: users, error } = await window.app.supabase.from('profiles').select('*');
+    try {
+        // [1] 사용자 리스트와 프로젝트 목록을 동시에 가져옵니다 (병렬 처리)
+        const [usersResult, projectsResult] = await Promise.all([
+            window.app.supabase
+                .from('profiles')
+                .select('*')
+                .order('display_name', { ascending: true }),
+            window.app.supabase
+                .from('tasks')
+                .select('project_name') // 프로젝트 명만 가져옴
+        ]);
 
-    if (error) {
-        console.error('Error fetching users:', error);
-        listContainer.innerHTML = 'Error loading users.';
+        const users = usersResult.data;
+        const projectData = projectsResult.data;
+
+        if (usersResult.error) throw usersResult.error;
+        if (projectsResult.error) throw projectsResult.error;
+
+        // [2] 프로젝트 목록 중복 제거 및 정렬
+        // (Set을 사용하여 중복을 없애고, 빈 이름은 제외한 뒤 가나다순 정렬)
+        const uniqueProjects = [...new Set(projectData.map(item => item.project_name))]
+            .filter(name => name && name.trim() !== '')
+            .sort();
+
+        // [3] 드롭다운(Select) 옵션 HTML 생성
+        let projectOptions = '<option value="">프로젝트 선택</option>';
+        if (uniqueProjects.length > 0) {
+            projectOptions += uniqueProjects.map(name => `<option value="${name}">${name}</option>`).join('');
+        } else {
+            projectOptions += '<option value="" disabled>생성된 프로젝트 없음</option>';
+        }
+
+        if (!users || users.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;">가입된 회원이 없습니다.</td></tr>';
+            return;
+        }
+
+        // [4] 테이블 렌더링 (Input -> Select 로 변경)
+        tableBody.innerHTML = users.map(user => `
+            <tr>
+                <td>${user.display_name || user.full_name || '이름 없음'}</td>
+                <td>${user.email}</td>
+                <td>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <select id="proj-${user.id}" style="width:120px; padding:4px; border:1px solid #ccc; border-radius:4px;">
+                            ${projectOptions}
+                        </select>
+                        
+                        <button onclick="executeGrantPermission('${user.id}', 'read')" 
+                                style="background-color: #00c875; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">읽기</button>
+                        <button onclick="executeGrantPermission('${user.id}', 'write')" 
+                                style="background-color: #0073ea; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">쓰기</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (err) {
+        console.error('관리자 데이터 로드 실패:', err.message);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:red; text-align:center;">로드 실패: ${err.message}</td></tr>`;
+    }
+}
+
+/**
+ * [관리자 전용] 특정 사용자에게 프로젝트 권한을 부여합니다.
+ * (HTML이 Select로 바뀌어도 .value로 값을 가져오는 방식은 동일하므로 로직 수정 없음)
+ */
+async function executeGrantPermission(userId, type) {
+    const projInput = document.getElementById(`proj-${userId}`);
+    const projectName = projInput ? projInput.value.trim() : "";
+
+    if (!projectName) {
+        alert('권한을 부여할 프로젝트를 선택해주세요.');
         return;
     }
 
-    let html = '<table class="admin-table"><tr><th>이름</th><th>이메일</th><th>프로젝트 권한 설정</th></tr>';
-    users.forEach(user => {
-        html += `
-            <tr>
-                <td>${user.display_name || '이름 없음'}</td>
-                <td>${user.email}</td>
-                <td>
-                    <input type="text" placeholder="프로젝트명" id="proj-${user.id}" style="width:100px; padding:4px;">
-                    <button onclick="grantPermission('${user.id}', 'read')">읽기</button>
-                    <button onclick="grantPermission('${user.id}', 'write')">쓰기</button>
-                </td>
-            </tr>`;
-    });
-    html += '</table>';
-    listContainer.innerHTML = html;
-}
+    try {
+        const upsertData = {
+            user_id: userId,
+            project_name: projectName,
+            is_approved: true, // 로그인 허용 여부
+            can_read: true,    // '읽기'나 '쓰기' 모두 읽기는 가능
+            can_write: (type === 'write')
+        };
 
-async function grantPermission(userId, type) {
-    const projectName = document.getElementById(`proj-${userId}`).value;
-    if (!projectName) return alert('프로젝트명을 입력하세요.');
+        // user_permissions 테이블에 데이터 저장 (upsert로 중복 방지)
+        const { error } = await window.app.supabase
+            .from('user_permissions')
+            .upsert(upsertData, { onConflict: 'user_id, project_name' });
 
-    const upsertData = {
-        user_id: userId,
-        project_name: projectName,
-        can_read: type === 'read' || type === 'write',
-        can_write: type === 'write'
-    };
+        if (error) throw error;
 
-    const { error } = await window.app.supabase
-        .from('project_permissions')
-        .upsert(upsertData, { onConflict: 'user_id, project_name' });
-
-    if (error) alert('권한 부여 실패: ' + error.message);
-    else alert(`${projectName} 프로젝트에 대한 ${type} 권한이 부여되었습니다.`);
+        alert(`[${projectName}] 프로젝트에 대한 ${type === 'write' ? '쓰기' : '읽기'} 권한을 부여했습니다.`);
+    } catch (err) {
+        console.error('권한 부여 에러:', err.message);
+        alert('권한 부여 중 오류가 발생했습니다: ' + err.message);
+    }
 }
