@@ -895,8 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Member Management Add-on ---
 
 /**
- * [관리자 전용] 회원 리스트를 불러와 테이블에 렌더링합니다.
- * (디자인 수정: 테이블 셀 여백 확대, 버튼/드롭다운 크기 및 간격 조정)
+ * [Admin Only] Render User List with English UI & Spacious Padding
  */
 async function renderUserList() {
     const tableBody = document.getElementById('adminUserTableBody');
@@ -923,31 +922,31 @@ async function renderUserList() {
             .filter(name => name && name.trim() !== '')
             .sort();
 
-        let projectOptions = '<option value="">프로젝트 선택</option>';
+        // [English] Dropdown Options
+        let projectOptions = '<option value="">Select Project</option>';
         if (uniqueProjects.length > 0) {
             projectOptions += uniqueProjects.map(name => `<option value="${name}">${name}</option>`).join('');
         } else {
-            projectOptions += '<option value="" disabled>생성된 프로젝트 없음</option>';
+            projectOptions += '<option value="" disabled>No active projects</option>';
         }
 
         if (!users || users.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 20px;">가입된 회원이 없습니다.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px;">No registered members found.</td></tr>';
             return;
         }
 
-        // [디자인 개선 포인트]
-        // 1. td 스타일에 padding: 14px 추가 -> 줄 간격 확보
-        // 2. flex gap: 10px -> 요소 사이 간격 확보
-        // 3. select/button padding 및 height 증가 -> 클릭 편의성 증대
+        // [Design Update]
+        // 1. Padding: 16px (Top/Bottom) 24px (Left/Right) -> Adds significant breathing room
+        // 2. Language: All text converted to English
         tableBody.innerHTML = users.map(user => `
             <tr style="border-bottom: 1px solid #f0f0f0;">
-                <td style="padding: 14px 12px; vertical-align: middle;">
-                    <span style="font-weight: 500;">${user.display_name || user.full_name || '이름 없음'}</span>
+                <td style="padding: 16px 24px; vertical-align: middle;">
+                    <span style="font-weight: 500;">${user.display_name || user.full_name || 'No Name'}</span>
                 </td>
-                <td style="padding: 14px 12px; vertical-align: middle; color: #666;">
+                <td style="padding: 16px 24px; vertical-align: middle; color: #666;">
                     ${user.email}
                 </td>
-                <td style="padding: 14px 12px; vertical-align: middle;">
+                <td style="padding: 16px 24px; vertical-align: middle;">
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <select id="proj-${user.id}" 
                                 style="width: 160px; padding: 6px 10px; border: 1px solid #e0e2e7; border-radius: 4px; height: 36px; background-color: #fff; cursor: pointer; font-size: 13px;">
@@ -957,13 +956,15 @@ async function renderUserList() {
                         <div style="display: flex; gap: 6px;">
                             <button onclick="executeGrantPermission('${user.id}', 'read')" 
                                     style="background-color: #00c875; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
+                                    title="Grant Read-Only Access"
                                     onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                                읽기
+                                Read
                             </button>
                             <button onclick="executeGrantPermission('${user.id}', 'write')" 
                                     style="background-color: #0073ea; border: none; color: white; padding: 0 16px; height: 36px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 13px; transition: opacity 0.2s;"
+                                    title="Grant Write Access"
                                     onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                                쓰기
+                                Write
                             </button>
                         </div>
                     </div>
@@ -972,8 +973,8 @@ async function renderUserList() {
         `).join('');
 
     } catch (err) {
-        console.error('관리자 데이터 로드 실패:', err.message);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:red; text-align:center; padding: 20px;">로드 실패: ${err.message}</td></tr>`;
+        console.error('Failed to load admin data:', err.message);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:var(--danger-color); text-align:center; padding: 20px;">Load Failed: ${err.message}</td></tr>`;
     }
 }
 
