@@ -55,8 +55,18 @@ body {
 .header-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
+    flex-shrink: 0;
 }
+
+.auth-status-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-left: 12px;
+    border-left: 1px solid #eee;
+}
+
 
 .logo {
     font-family: var(--font-heading);
@@ -129,6 +139,12 @@ body {
     padding: 4px 12px;
     border-radius: 6px;
     gap: 8px;
+    width: 180px;
+    /* Reduced width to prevent wrapping */
+    transition: width 0.3s;
+}
+
+.search-bar:focus-within {
     width: 250px;
 }
 
@@ -223,6 +239,8 @@ body {
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    padding-left: 12px;
+    /* 왼쪽 여백 추가 */
 }
 
 .panel-header {
@@ -306,8 +324,8 @@ body {
     position: relative;
 }
 
-.gantt-timeline-header {
-    height: 60px;
+.gantt-header {
+    height: 48px;
     background-color: #f8f9fa;
     border-bottom: 1px solid var(--border-color);
     display: flex;
@@ -488,21 +506,37 @@ body {
     z-index: 2000;
 }
 
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #eee;
+    padding: 0 32px;
+    /* Match panel padding */
+    background-color: #fff;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+}
+
 .modal-content {
     background: white;
-    width: 600px;
-    border-radius: 8px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    width: 750px;
+    /* Widened for a more spacious feel */
+    border-radius: 16px;
+    /* Slightly more rounded */
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
     max-height: 90vh;
+    overflow: hidden;
+    transition: all 0.3s ease;
 }
 
-.modal-tabs {
-    display: flex;
-    border-bottom: 1px solid #eee;
-    padding: 0 24px;
-}
 
 .tab-btn {
     background: none;
@@ -522,16 +556,18 @@ body {
 .tab-btn.active::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    left: 20%;
-    width: 60%;
+    bottom: -2px;
+    /* 헤더 테두리와 완벽하게 밀착 */
+    left: 0;
+    width: 100%;
     height: 3px;
-    background-color: #d32f2f;
-    /* Red underline like in image */
+    background-color: #c63927;
 }
 
+
 .tab-panels {
-    padding: 24px;
+    padding: 32px 40px;
+    /* More generous internal spacing */
     flex: 1;
     overflow-y: auto;
 }
@@ -546,8 +582,14 @@ body {
 
 .form-row {
     display: flex;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.form-row.grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
 }
 
 .form-group {
@@ -565,17 +607,120 @@ body {
 }
 
 .form-group label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #888;
+    font-size: 12px;
+    /* Smaller label for cleaner look */
+    font-weight: 700;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .form-group input,
 .form-group select {
-    padding: 8px 12px;
+    padding: 10px 12px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 14px;
+    background-color: #fff;
+    transition: border-color 0.2s;
+    width: 100%;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #c63927;
+    box-shadow: 0 0 0 3px rgba(198, 57, 39, 0.1);
+    outline: none;
+}
+
+.color-picker-container {
+    display: flex;
+    align-items: center;
+    height: 42px;
+}
+
+.color-picker {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #ddd;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.color-picker:hover {
+    transform: scale(1.1);
+}
+
+.modal-textarea {
+    width: 100%;
+    height: 120px;
+    padding: 12px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    transition: border-color 0.2s;
+}
+
+.modal-textarea:focus {
+    border-color: #c63927;
+    outline: none;
+}
+
+/* Custom Premium Slider */
+.progress-group {
+    margin-top: 8px;
+}
+
+.label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.value-badge {
+    background-color: #fceceb;
+    color: #c63927;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.slider-wrapper {
+    padding: 10px 0;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    /* Add standard property */
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    background: #eee;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #c63927;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(198, 57, 39, 0.3);
+    transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
 }
 
 .color-preview {
@@ -615,16 +760,19 @@ body {
 }
 
 .modal-footer {
-    padding: 16px 24px;
+    padding: 16px 32px;
+    /* 패널과 여백 통일 */
     border-top: 1px solid #eee;
     display: flex;
     justify-content: space-between;
+    /* Delete와 OK/Cancel 분리 */
     align-items: center;
 }
 
 .footer-actions {
     display: flex;
-    gap: 12px;
+    gap: 16px;
+    /* Increased gap */
 }
 
 .footer-btn {
@@ -676,15 +824,7 @@ textarea#editTaskDesc {
     font-size: 14px;
 }
 
-.attachment-placeholder {
-    height: 200px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: #999;
-    gap: 12px;
-}
+/* Remove unused attachment styles */
 
 .resource-section,
 .resource-add {
@@ -707,4 +847,206 @@ textarea#editTaskDesc {
     align-items: center;
     gap: 10px;
     font-size: 13px;
+}
+
+/* 프로젝트 드롭다운 항목 스타일 */
+.project-item {
+    transition: background-color 0.2s;
+    padding: 0 !important;
+    /* li 기본 패딩 제거 */
+}
+
+.project-item:hover {
+    background-color: var(--hover-bg);
+}
+
+.project-delete-btn {
+    opacity: 0.3;
+    transition: all 0.2s;
+}
+
+.project-item:hover .project-delete-btn {
+    opacity: 1;
+}
+
+.project-delete-btn:hover {
+    color: #ff4d4f !important;
+    background-color: #fff1f0 !important;
+    border-radius: 4px;
+}
+
+.no-data {
+    padding: 16px;
+    color: #999;
+    font-size: 13px;
+    text-align: center;
+    cursor: default;
+}
+
+/* Authentication Modal Styling */
+.auth-modal {
+    width: 400px;
+    padding: 40px;
+    text-align: center;
+}
+
+.auth-header {
+    margin-bottom: 32px;
+}
+
+.auth-logo {
+    height: 30px;
+    margin-bottom: 20px;
+}
+
+.auth-header h2 {
+    font-family: var(--font-heading);
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.auth-header p {
+    color: #666;
+    font-size: 14px;
+}
+
+.email-input-group {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #fff;
+    transition: border-color 0.2s;
+}
+
+.email-input-group:focus-within {
+    border-color: #004d99;
+    box-shadow: 0 0 0 3px rgba(0, 77, 153, 0.1);
+}
+
+.email-input-group input {
+    border: none !important;
+    outline: none !important;
+    flex: 1;
+    font-size: 14px;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.domain-fixed {
+    color: #888;
+    font-weight: 600;
+    font-size: 13px;
+    margin-left: 8px;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.auth-submit-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #004d99;
+    /* KB Autosys Blue */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 24px;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.auth-submit-btn:active {
+    transform: scale(0.98);
+}
+
+.auth-submit-btn:hover {
+    background-color: #003366;
+}
+
+.auth-toggle {
+    margin-top: 20px;
+    font-size: 13px;
+    color: #666;
+}
+
+.auth-toggle span {
+    color: #004d99;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.otp-instruction {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    color: #444;
+}
+
+.otp-instruction i {
+    color: #004d99;
+    width: 32px;
+    height: 32px;
+}
+
+.otp-input {
+    text-align: center;
+    font-size: 24px !important;
+    letter-spacing: 8px;
+    font-weight: 700;
+}
+
+/* Admin Modal Styling */
+.admin-modal {
+    width: 700px;
+}
+
+.admin-body {
+    padding: 24px;
+}
+
+.admin-section {
+    margin-bottom: 32px;
+}
+
+.admin-section h4 {
+    margin-bottom: 16px;
+    font-size: 16px;
+    color: #333;
+}
+
+.permission-list {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.permission-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eee;
+}
+
+.permission-item:last-child {
+    border-bottom: none;
+}
+
+.forgot-link {
+    margin-top: 12px !important;
+}
+
+.forgot-link span {
+    font-size: 12px;
+    color: #999;
+}
+
+.forgot-link span:hover {
+    color: #666;
 }

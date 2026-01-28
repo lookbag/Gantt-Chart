@@ -21,31 +21,48 @@
         <header class="main-header">
             <div class="header-left">
                 <button class="menu-toggle"><i data-lucide="layout-grid"></i></button>
-                <h1 class="logo" contenteditable="true" spellcheck="false" id="appTitle">생산관리</h1>
+                <div style="position: relative; display: flex; align-items: center; gap: 8px;">
+                    <h1 class="logo" contenteditable="true" spellcheck="false" id="appTitle">생산관리</h1>
+                    <button class="icon-btn" id="showProjectList"><i data-lucide="chevron-down"></i></button>
+
+                    <div id="projectDropdown" class="context-menu hidden" style="top: 40px; left: 0; width: 200px;">
+                        <ul id="projectListItems">
+                        </ul>
+                    </div>
+                </div>
             </div>
+
             <div class="header-right">
                 <div class="search-bar">
                     <i data-lucide="search"></i>
-                    <input type="text" id="searchInput" placeholder="Search (Ctrl+E)">
+                    <input type="text" id="searchInput" placeholder="Search">
                 </div>
+
                 <div class="timeline-controls">
                     <button class="icon-btn" id="zoomOut"><i data-lucide="zoom-out"></i></button>
                     <button class="icon-btn" id="zoomIn"><i data-lucide="zoom-in"></i></button>
+
                     <div class="date-navigator">
                         <button class="nav-btn" id="prevStart"><i data-lucide="chevron-left"></i></button>
                         <span class="current-period" id="viewStartDateText">2026. 1. 1.</span>
                         <button class="nav-btn" id="nextStart"><i data-lucide="chevron-right"></i></button>
                     </div>
+
                     <span class="range-separator">-</span>
+
                     <div class="date-navigator">
                         <button class="nav-btn" id="prevEnd"><i data-lucide="chevron-left"></i></button>
                         <span class="current-period" id="viewEndDateText">2026. 4. 7.</span>
                         <button class="nav-btn" id="nextEnd"><i data-lucide="chevron-right"></i></button>
                     </div>
                 </div>
-                <button class="pro-upgrade-btn"><span class="pro-badge">PRO</span> Upgrade</button>
-                <button class="icon-btn"><i data-lucide="menu"></i></button>
-                <div class="user-avatar"></div>
+
+                <div class="auth-status-container">
+                    <button class="icon-btn" id="adminMenuBtn" style="display:none;" title="관리자 설정"><i
+                            data-lucide="shield-check"></i></button>
+                    <div class="user-avatar" id="userAvatar">?</div>
+                    <button class="icon-btn" id="logoutBtn" title="로그아웃"><i data-lucide="log-out"></i></button>
+                </div>
             </div>
         </header>
 
@@ -57,130 +74,101 @@
                     <button class="icon-btn back-btn"><i data-lucide="chevron-left"></i></button>
                     <button class="add-task-btn" id="globalAddTask"><i data-lucide="plus"></i></button>
                 </div>
-                <div class="tree-grid-container" id="treeGrid">
-                    <!-- Tree items will be injected here -->
+                <div id="treeGrid" class="tree-grid">
+                    <!-- Dynamic Tree Items -->
                 </div>
             </aside>
 
             <!-- Right Panel: Gantt Chart -->
             <section class="gantt-panel">
-                <div class="gantt-container" id="ganttContainer">
-                    <div class="gantt-timeline-header" id="ganttHeader">
-                        <!-- Timeline dates will be injected here -->
+                <div class="gantt-header-container">
+                    <div id="ganttHeader" class="gantt-header">
+                        <!-- Dynamic Month Cells -->
                     </div>
-                    <div class="gantt-body" id="ganttBody">
-                        <!-- Gantt bars will be injected here -->
-                        <div class="today-indicator"></div>
-                    </div>
+                </div>
+                <div id="ganttBody" class="gantt-body">
+                    <!-- Dynamic Rows and Bars -->
+                    <div class="today-indicator"></div>
                 </div>
             </section>
         </main>
 
-        <!-- Edit Modal -->
+        <!-- Task Edit Modal -->
         <div id="editModal" class="modal-overlay hidden">
             <div class="modal-content">
-                <nav class="modal-tabs">
-                    <button class="tab-btn active" data-tab="general">General</button>
-                    <button class="tab-btn" data-tab="description">Description</button>
-                    <button class="tab-btn" data-tab="resources">Resources</button>
-                    <button class="tab-btn" data-tab="attachment">Attachment</button>
-                </nav>
-                <div class="tab-panels">
-                    <!-- General Tab -->
-                    <div class="tab-panel active" id="tab-general">
-                        <div class="form-row">
-                            <div class="form-group color-picker-group">
-                                <label>Color</label>
-                                <div class="color-preview" id="editTaskColor"></div>
-                            </div>
-                            <div class="form-group flex-grow">
-                                <label>Label</label>
-                                <input type="text" id="editTaskLabel" placeholder="Task Name">
-                            </div>
-                            <div class="form-group">
-                                <label>Type</label>
-                                <select id="editTaskType">
-                                    <option value="Project">Project</option>
-                                    <option value="Task">Task</option>
-                                </select>
-                            </div>
+                <div class="modal-header">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="general">General</button>
+                    </div>
+                    <button class="icon-btn" id="cancelEdit"><i data-lucide="x"></i></button>
+                </div>
+
+                <div id="tab-general" class="tab-panel active">
+                    <div class="form-group">
+                        <label>Task Name</label>
+                        <input type="text" id="editTaskLabel" placeholder="Enter task name">
+                    </div>
+                    <div class="form-row grid-3">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="editTaskStart">
                         </div>
-                        <div class="form-row date-row">
-                            <div class="form-group">
-                                <label>Start Date</label>
-                                <div class="date-input-wrap">
-                                    <input type="date" id="editTaskStart">
-                                    <i data-lucide="calendar"></i>
-                                </div>
-                            </div>
-                            <div class="arrow-indicator">➔</div>
-                            <div class="form-group compact">
-                                <label>Weekdays</label>
-                                <div class="number-input-wrap">
-                                    <input type="number" id="editTaskWeekdays" min="1">
-                                    <i data-lucide="briefcase"></i>
-                                </div>
-                            </div>
-                            <div class="arrow-indicator">➔</div>
-                            <div class="form-group">
-                                <label>End Date</label>
-                                <div class="date-input-wrap">
-                                    <input type="date" id="editTaskEnd">
-                                    <i data-lucide="calendar"></i>
-                                </div>
-                            </div>
+                        <div class="form-group">
+                            <label>Weekdays</label>
+                            <input type="number" id="editTaskWeekdays" min="1">
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>State Icon</label>
-                                <select id="editTaskState">
-                                    <option value="none">None</option>
-                                    <option value="running">Running</option>
-                                    <option value="blocked">Blocked</option>
-                                    <option value="done">Done</option>
-                                </select>
-                            </div>
-                            <div class="form-group compact">
-                                <label>Progress</label>
-                                <div class="progress-input-wrap">
-                                    <input type="number" id="editTaskProgress" min="0" max="100">
-                                    <span>%</span>
-                                </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input type="date" id="editTaskEnd">
+                        </div>
+                    </div>
+                    <div class="form-row grid-3">
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select id="editTaskType">
+                                <option>Project</option>
+                                <option>Task</option>
+                                <option>Milestone</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <select id="editTaskState">
+                                <option value="none">None</option>
+                                <option value="running">Running</option>
+                                <option value="completed">Completed</option>
+                                <option value="delayed">Delayed</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Color</label>
+                            <div class="color-picker-container">
+                                <div class="color-picker" id="editTaskColor"></div>
                             </div>
                         </div>
                     </div>
-                    <!-- Description Tab -->
-                    <div class="tab-panel" id="tab-description">
-                        <textarea id="editTaskDesc" placeholder="Long description"></textarea>
-                    </div>
-                    <!-- Resources Tab -->
-                    <div class="tab-panel" id="tab-resources">
-                        <div class="resource-section">
-                            <p class="section-label">Assigned resources</p>
-                            <div class="resource-list" id="resourceList"></div>
+                    <div class="form-group progress-group">
+                        <div class="label-row">
+                            <label>Progress (%)</label>
+                            <span id="progressValue" class="value-badge">0%</span>
                         </div>
-                        <div class="resource-add">
-                            <p class="section-label">Add resource</p>
-                            <button class="add-resource-btn">
-                                <img src="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png"
-                                    alt="Drive" width="16">
-                                Add from directory ...
-                            </button>
+                        <div class="slider-wrapper">
+                            <input type="range" id="editTaskProgress" min="0" max="100">
                         </div>
                     </div>
-                    <!-- Attachment Tab -->
-                    <div class="tab-panel" id="tab-attachment">
-                        <div class="attachment-placeholder">
-                            <i data-lucide="paperclip"></i>
-                            <p>No attachments yet.</p>
-                        </div>
+                    <div class="form-group description-group">
+                        <label>Description</label>
+                        <textarea id="editTaskDescription" placeholder="Enter task details here..."
+                            class="modal-textarea"></textarea>
                     </div>
                 </div>
+
+
                 <div class="modal-footer">
-                    <button class="footer-btn delete" id="deleteTask"><i data-lucide="trash-2"></i> Delete</button>
+                    <button class="footer-btn delete" id="deleteTask">Delete</button>
                     <div class="footer-actions">
-                        <button class="footer-btn cancel" id="cancelEdit">Cancel</button>
-                        <button class="footer-btn save" id="saveTask">Save</button>
+                        <button class="footer-btn cancel" id="cancelEditBtn">Cancel</button>
+                        <button class="footer-btn save" id="saveTask">OK</button>
                     </div>
                 </div>
             </div>
@@ -190,25 +178,115 @@
         <div id="contextMenu" class="context-menu hidden">
             <ul>
                 <li data-action="newChild"><i data-lucide="corner-down-right"></i> New child item ...</li>
-                <li data-action="newSameRow"><i data-lucide="list-plus"></i> New item on same row ...</li>
+                <li data-action="newSameRow"><i data-lucide="rows"></i> New item on same row ...</li>
+                <li data-action="edit"><i data-lucide="pencil"></i> Edit item ...</li>
                 <li class="separator"></li>
-                <li data-action="edit"><i data-lucide="edit-3"></i> Edit item ...</li>
                 <li data-action="copy"><i data-lucide="copy"></i> Copy items</li>
-                <li data-action="paste" class="disabled"><i data-lucide="clipboard-list"></i> Paste item as child ...
-                </li>
+                <li data-action="paste" class="disabled"><i data-lucide="clipboard"></i> Paste item as child ...</li>
                 <li class="separator"></li>
-                <li data-action="saveTemplate"><i data-lucide="file-up"></i> Save as template ...</li>
+                <li data-action="template"><i data-lucide="file-up"></i> Save as template ...</li>
                 <li data-action="moveUp"><i data-lucide="arrow-up"></i> Move up</li>
                 <li data-action="moveDown"><i data-lucide="arrow-down"></i> Move Down</li>
                 <li class="separator"></li>
-                <li data-action="state"><i data-lucide="file-digit"></i> State Icon <i data-lucide="chevron-right"
-                        class="sub-icon"></i></li>
                 <li data-action="openAttachment" class="disabled"><i data-lucide="paperclip"></i> Open attachment</li>
-                <li class="separator"></li>
                 <li data-action="delete" class="danger"><i data-lucide="trash-2"></i> Delete item</li>
             </ul>
         </div>
+        <!-- Auth Modal -->
+        <div id="authModal" class="modal-overlay hidden">
+            <div class="modal-content auth-modal">
+                <div class="auth-header">
+                    <img src="https://www.kbautosys.com/img/common/logo.png" alt="KB Autosys" class="auth-logo">
+                    <h2>Project Planner</h2>
+                    <p id="authSubtitle">Please log in with your company email</p>
+                </div>
+
+                <div id="loginForm">
+                    <div class="login-field">
+                        <label>Email Address</label>
+                        <div class="email-input-group">
+                            <input type="text" id="userAccount" placeholder="ID (Username)">
+                            <span class="domain-fixed">@kbautosys.com</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="authPassword" placeholder="••••••••">
+                    </div>
+                    <div id="registerFields" class="hidden">
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" id="authName" placeholder="Your real name">
+                        </div>
+                    </div>
+                    <button class="auth-submit-btn" id="authSubmit">Login</button>
+                    <p class="auth-toggle">Don't have an account? <span id="toggleAuthMode">Sign Up</span></p>
+                    <p class="auth-toggle forgot-link"><span id="openForgotPass">Forgot your password?</span></p>
+                </div>
+
+                <div id="forgotPassForm" class="hidden">
+                    <p style="margin-bottom: 20px; font-size: 14px; color: #666;">We will send a password reset link to
+                        your registered company email.</p>
+                    <div class="form-group">
+                        <label>Account ID</label>
+                        <div class="email-input-group">
+                            <input type="text" id="forgotAccount" placeholder="ID (Username)">
+                            <span class="domain-fixed">@kbautosys.com</span>
+                        </div>
+                    </div>
+                    <button class="auth-submit-btn" id="forgotSubmit">Send Reset Link</button>
+                    <p class="auth-toggle"><span id="backToLogin">Back to Login</span></p>
+                </div>
+
+                <div id="resetPassForm" class="hidden">
+                    <p style="margin-bottom: 20px; font-size: 14px; color: #333;">Please enter your new password.</p>
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" id="newPassword" placeholder="••••••••">
+                    </div>
+                    <button class="auth-submit-btn" id="resetSubmit">Reset Password</button>
+                </div>
+
+                <div id="otpSection" class="hidden">
+                    <div class="otp-instruction">
+                        <i data-lucide="mail"></i>
+                        <p>Please enter the <strong>6-digit verification code</strong> sent to your email.</p>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="otpToken" placeholder="000000" maxlength="6" class="otp-input">
+                    </div>
+                    <button class="auth-submit-btn" id="otpSubmit">Verify & Sign Up</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Modal -->
+        <div id="adminModal" class="modal-overlay hidden">
+            <div class="modal-content admin-modal">
+                <div class="modal-header">
+                    <h3>User Permission Management (Admin)</h3>
+                    <button class="icon-btn" id="closeAdmin"><i data-lucide="x"></i></button>
+                </div>
+                <div class="admin-body">
+                    <div class="admin-section">
+                        <h4>Grant User Permissions</h4>
+                        <div class="form-row">
+                            <input type="text" id="adminUserId" placeholder="User ID">
+                            <input type="text" id="adminProjName" placeholder="Project Name">
+                            <button class="footer-btn save" id="approveBtn">Grant Access</button>
+                        </div>
+                    </div>
+                    <div id="userPermissionList" class="permission-list">
+                        <!-- Permissions will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>
 
