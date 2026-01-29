@@ -1,33 +1,43 @@
 /**
  * Authentication and Permission Logic for KB Autosys Gantt
  */
-const authSuppabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+const authSuppabase = window.sbClient;
 
 const Auth = {
     isLoggedIn: false,
     isAdmin: false,
     user: null,
-    mode: 'login', // 'login' or 'register'
+    mode: 'login',
 
     async init() {
-        this.bindEvents();
+        this.bindEvents(); // [중요] 버튼 기능을 먼저 활성화합니다.
 
-        // Supabase 인증 상태 변화 감지 (비밀번호 재설정 이벤트 포착용)
-        authSuppabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'PASSWORD_RECOVERY') {
-                this.showResetForm(); // 재설정 모드면 강제로 폼 표시
-            } else if (event === 'SIGNED_IN' && session) {
-                this.handleAuthStateChange(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                // 로그아웃 시 처리
+        if (!authSuppabase) {
+            console.error("Auth: Supabase client not found.");
+            return;
+        }
+
+        try {
+            // Supabase 인증 상태 변화 감지
+            authSuppabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    this.showResetForm();
+                } else if (event === 'SIGNED_IN' && session) {
+                    await this.handleAuthStateChange(session.user);
+                } else if (event === 'SIGNED_OUT') {
+                    // 로그아웃 시 reload
+                }
+            });
+
+            // 초기 세션 체크
+            const { data } = await authSuppabase.auth.getSession();
+            if (data.session && !window.location.hash.includes('type=recovery')) {
+                await this.handleAuthStateChange(data.session.user);
+            } else if (!data.session) {
+                this.showAuthModal();
             }
-        });
-
-        // 초기 세션 체크 (기존 로직 유지하되, 리스너가 처리하므로 중복 방지)
-        const { data: { session } } = await authSuppabase.auth.getSession();
-        if (session && !window.location.hash.includes('type=recovery')) {
-            this.handleAuthStateChange(session.user);
-        } else if (!session) {
+        } catch (err) {
+            console.error("Auth Init Error:", err);
             this.showAuthModal();
         }
     },

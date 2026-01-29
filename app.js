@@ -4,14 +4,12 @@
 
 class GanttApp {
     constructor() {
-        // CONFIG가 정의되어 있는지 확인
-        if (typeof CONFIG === 'undefined') {
-            console.error('config.js 파일을 찾을 수 없습니다.');
+        if (window.sbClient) {
+            this.supabase = window.sbClient;
+        } else {
+            console.error("GanttApp: Supabase client not found.");
             return;
         }
-
-        // Supabase 클라이언트 초기화
-        this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
         this.tasks = [];
         this.activeProject = localStorage.getItem('lastProject') || null;
