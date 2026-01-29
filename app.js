@@ -76,17 +76,27 @@ class GanttApp {
             }
             document.getElementById('appTitle').innerText = projectName;
 
+            // [추가] 멤버 이니셜 아이콘 표시 실행
+            this.renderProjectMemberIcons(projectName);
+
             // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    alert(`You do not have access to the '${projectName}' project. Please request approval from the administrator.`);
+                    // [수정됨] 단순 경고창 대신 -> 확인 누르면 이메일 발송
+                    if (confirm(`'${projectName}' 프로젝트에 접근 권한이 없습니다.\n관리자(csyoon)에게 접근 권한 요청 메일을 보내시겠습니까?`)) {
+                        const subject = `[Gantt] 권한 요청: ${projectName}`;
+                        const body = `안녕하세요,\n\n다음 프로젝트에 대한 접근 권한을 요청합니다.\n\n- 프로젝트명: ${projectName}\n- 요청자: ${Auth.user.email}\n\n확인 부탁드립니다.`;
+                        window.location.href = `mailto:csyoon@kbautosys.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                    }
+
                     this.tasks = [];
                     this.renderAll();
                     return;
                 }
             }
 
+            // (이하 기존 로직 동일)
             const { data, error } = await this.supabase
                 .from('tasks')
                 .select('*')
@@ -489,17 +499,23 @@ class GanttApp {
 
                 if (width <= 0) return;
 
+                // [수정] 색상 로직: 100%면 검은색, 아니면 원래 색상
+                let barColor = task.color;
+                if (parseInt(task.progress) === 100) {
+                    barColor = '#000000'; // 100% 달성 시 완전 검은색
+                }
+
                 const bar = document.createElement('div');
                 bar.className = 'gantt-bar';
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
-                bar.style.backgroundColor = task.color;
+                bar.style.backgroundColor = barColor;
                 bar.style.top = `${index * 40 + 6}px`;
                 bar.dataset.id = task.id;
 
                 bar.innerHTML = `
                     <div class="resizer resizer-l"></div>
-                    <div class="progress-fill" style="width: ${task.progress}%"></div>
+                    <div class="progress-fill" style="width: ${task.progress}%; background-color: rgba(0,0,0,0.3);"></div>
                     <span class="bar-label">${task.label}</span>
                     <div class="resizer resizer-r"></div>
                 `;
@@ -762,12 +778,11 @@ class GanttApp {
             case 'newChild': this.addNewTask(taskId); break;
             case 'newSameRow': this.addNewTask(null, taskId); break;
             case 'delete': this.deleteTask(taskId); break;
-            case 'moveUp': this.moveTask(taskId, -1); break;
-            case 'moveDown': this.moveTask(taskId, 1); break;
+            case 'moveUp': this.moveTask(taskId, -1); break;   // 위로 이동
+            case 'moveDown': this.moveTask(taskId, 1); break;  // 아래로 이동
             case 'copy': console.log('Copy'); break;
             case 'paste': console.log('Paste'); break;
             case 'template': console.log('Template'); break;
-            case 'openAttachment': console.log('Attachment'); break;
         }
     }
 
@@ -818,16 +833,22 @@ class GanttApp {
     }
 
     async deleteTask(id) {
-        if (!Auth.isAdmin) {
-            alert("Permission Denied: Only administrators can delete tasks.");
+        // [수정] 관리자가 아니고, 현재 프로젝트 권한도 없으면 거부
+        const hasPermission = await this.checkPermission(Auth.user.id, this.activeProject);
+
+        // (관리자가 아님 AND 권한없음) 이면 차단
+        if (!Auth.isAdmin && !hasPermission) {
+            alert("권한이 없습니다: 프로젝트 멤버 또는 관리자만 삭제할 수 있습니다.");
             return;
         }
 
-        if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
+        if (!confirm("정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
             return;
         }
 
         await this.deleteFromSupabase(id);
+
+        // 화면 갱신
         const sid = String(id);
         this.tasks = this.tasks.filter(t =>
             String(t.id) !== sid && String(t.parentId) !== sid && String(t.rowTaskId) !== sid
@@ -835,21 +856,43 @@ class GanttApp {
         this.renderAll();
     }
 
+    // 2. 이동 로직 업그레이드 (DB 저장 기능 추가)
     async moveTask(id, dir) {
         const sid = String(id);
         const index = this.tasks.findIndex(t => String(t.id) === sid);
         if (index === -1) return;
+
         const newIndex = index + dir;
         if (newIndex < 0 || newIndex >= this.tasks.length) return;
 
+        // (1) 배열에서 순서 바꾸기 (즉각 반응)
         const temp = this.tasks[index];
         this.tasks[index] = this.tasks[newIndex];
         this.tasks[newIndex] = temp;
 
-        // 순서 변경의 경우 'sort_order' 같은 컬럼을 두고 업데이트하는 것이 정석이나,
-        // 여기서는 전체 tasks 배열의 created_at 등을 조정하거나 별도 로직이 필요함.
-        // 현재는 메모리 상에서만 이동 후 renderAll 호출
-        this.renderAll();
+        // (2) sort_order 값 교환 (DB 저장용)
+        const taskA = this.tasks[index];
+        const taskB = this.tasks[newIndex];
+
+        // 만약 sort_order가 없으면 임시로 인덱스 사용
+        const orderA = taskA.sort_order || index;
+        const orderB = taskB.sort_order || newIndex;
+
+        // 서로 값을 맞바꿈
+        taskA.sort_order = orderB;
+        taskB.sort_order = orderA;
+
+        this.renderAll(); // 화면 즉시 갱신
+
+        // (3) Supabase에 변경된 순서 저장 (백그라운드)
+        try {
+            await this.supabase.from('tasks').upsert([
+                { id: taskA.id, sort_order: taskA.sort_order },
+                { id: taskB.id, sort_order: taskB.sort_order }
+            ]);
+        } catch (e) {
+            console.error("순서 저장 실패:", e);
+        }
     }
 
     openEditModal(taskId) {
@@ -900,6 +943,69 @@ class GanttApp {
         await this.syncTask(task);
         this.renderAll();
         this.closeEditModal();
+    }
+
+    // [신규 함수] 프로젝트 멤버 이니셜 표시
+    async renderProjectMemberIcons(projectName) {
+        // 아이콘을 넣을 위치 찾기 (HR 제목 옆)
+        const headerContainer = document.querySelector('.header-left .logo').parentNode;
+
+        // 기존에 그려진 아이콘이 있다면 삭제 (중복 방지)
+        const oldIcons = headerContainer.querySelectorAll('.project-member-icon');
+        oldIcons.forEach(el => el.remove());
+
+        try {
+            // 1. 이 프로젝트의 멤버 ID 조회
+            const { data: perms } = await this.supabase
+                .from('user_permissions')
+                .select('user_id')
+                .eq('project_name', projectName)
+                .eq('is_approved', true);
+
+            if (!perms || perms.length === 0) return;
+
+            const userIds = perms.map(p => p.user_id);
+
+            // 2. 프로필 정보(이름) 조회
+            const { data: profiles } = await this.supabase
+                .from('profiles')
+                .select('display_name, email')
+                .in('id', userIds);
+
+            if (!profiles) return;
+
+            // 3. 아이콘 생성 및 부착
+            profiles.forEach(user => {
+                const name = user.display_name || user.email;
+                const initial = name.charAt(0).toUpperCase();
+
+                const badge = document.createElement('div');
+                badge.className = 'project-member-icon'; // CSS 스타일링용 클래스
+                badge.innerText = initial;
+                badge.title = name; // 마우스 올리면 이름 나옴
+
+                // 스타일 직접 지정 (CSS 파일에 넣어도 됨)
+                Object.assign(badge.style, {
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FF7575', // 요청하신 붉은색 계열
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginLeft: '8px',
+                    cursor: 'help'
+                });
+
+                headerContainer.appendChild(badge);
+            });
+
+        } catch (e) {
+            console.error("멤버 아이콘 로드 실패", e);
+        }
     }
 }
 
