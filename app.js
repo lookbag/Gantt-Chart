@@ -6,17 +6,17 @@ class GanttApp {
     constructor() {
         // CONFIG가 정의되어 있는지 확인
         if (typeof CONFIG === 'undefined') {
-            console.error('config.js 파일을 찾을 수 없습니다.');
+            console.error('config.js file not found.');
             return;
         }
 
-        // Supabase 클라이언트 초기화
+        // Initialize Supabase Client
         this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
         this.tasks = [];
         this.activeProject = localStorage.getItem('lastProject') || null;
 
-        // 초기 날짜 설정: 오늘 기준 7일 전 시작, 4개월 후 종료
+        // Initial date setup: Start 7 days ago, end 4 months later
         const today = new Date();
         this.viewStart = new Date(today);
         this.viewStart.setDate(today.getDate() - 7);
@@ -53,7 +53,7 @@ class GanttApp {
                 { event: '*', schema: 'public', table: 'tasks' },
                 (payload) => {
                     console.log('Realtime change detected:', payload);
-                    // 자신의 변경으로 인한 재로딩은 최소화하고 싶다면 payload.new.user_id 체크 가능
+                    // Minimal reloading - you could check payload.new.user_id if needed
                     this.loadTasks();
                 }
             )
@@ -72,22 +72,25 @@ class GanttApp {
                 return;
             }
 
-            // UI 업데이트
+            // UI Update
             if (document.getElementById('activeProjectName')) {
                 document.getElementById('activeProjectName').innerText = projectName;
             }
             document.getElementById('appTitle').innerText = projectName;
 
-            // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
+            // Permission Check
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    alert(`You do not have access to the '${projectName}' project. Please request approval from the administrator.`);
+                    this.showAccessDeniedModal(projectName);
                     this.tasks = [];
                     this.renderAll();
                     return;
                 }
             }
+
+            // Render Members
+            this.renderProjectMembers(projectName);
 
             const { data, error } = await this.supabase
                 .from('tasks')
@@ -142,11 +145,11 @@ class GanttApp {
         try {
             const projectName = document.getElementById('appTitle').innerText.trim();
 
-            // 권한 체크
+            // Permission Check
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    alert("데이터 수정 권한이 없습니다.");
+                    alert("You do not have permission to modify data.");
                     return;
                 }
             }
@@ -181,8 +184,8 @@ class GanttApp {
 
     async deleteFromSupabase(id) {
         try {
-            // 트리 구조이므로 하위 태스크나 같은 행의 세그먼트도 함께 삭제 고려
-            // Supabase에서 cascade 설정이 되어있지 않다면 수동으로 처리
+            // Consider deleting subtasks or segments in the same row due to tree structure
+            // Handle manually if cascade is not set in Supabase
             const { error } = await this.supabase
                 .from('tasks')
                 .delete()
@@ -240,20 +243,32 @@ class GanttApp {
 
     async fetchProjectList() {
         try {
-            const { data, error } = await this.supabase
+            const { data: taskData, error: taskError } = await this.supabase
                 .from('tasks')
                 .select('project_name');
 
-            if (error) throw error;
+            if (taskError) throw taskError;
 
-            const uniqueProjects = [...new Set(data.map(item => item.project_name))].filter(Boolean).sort();
-            this.renderProjectDropdown(uniqueProjects);
+            const uniqueProjects = [...new Set(taskData.map(item => item.project_name))].filter(Boolean).sort();
+
+            // Fetch current user's approved projects
+            let approvedProjects = [];
+            if (!Auth.isAdmin && Auth.user) {
+                const { data: permData } = await this.supabase
+                    .from('user_permissions')
+                    .select('project_name')
+                    .eq('user_id', Auth.user.id)
+                    .eq('is_approved', true);
+                if (permData) approvedProjects = permData.map(p => p.project_name);
+            }
+
+            this.renderProjectDropdown(uniqueProjects, approvedProjects);
         } catch (err) {
             console.error('Project list fetch failed:', err.message);
         }
     }
 
-    renderProjectDropdown(projects) {
+    renderProjectDropdown(projects, approvedProjects) {
         const listContainer = document.getElementById('projectListItems');
         if (!listContainer) return;
         listContainer.innerHTML = '';
@@ -264,6 +279,7 @@ class GanttApp {
         }
 
         projects.forEach(name => {
+            const isApproved = Auth.isAdmin || approvedProjects.includes(name);
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
@@ -273,7 +289,8 @@ class GanttApp {
 
             li.innerHTML = `
                 <span class="project-name-link" style="flex-grow: 1; cursor: pointer; padding: 4px; display: flex; align-items: center; gap: 8px;">
-                    <i data-lucide="layout" style="width:14px;"></i> ${name}
+                    <i data-lucide="${isApproved ? 'layout' : 'lock'}" style="width:14px; ${isApproved ? '' : 'color:#999;'}"></i> 
+                    ${name}
                 </span>
                 ${Auth.isAdmin ? `
                 <button class="project-delete-btn" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:4px;">
@@ -307,45 +324,45 @@ class GanttApp {
     }
 
     async createNewProject() {
-        const name = prompt('새 프로젝트 이름을 입력하세요:');
-        if (!name || name.trim() === '') return;
-
-        const projectName = name.trim();
-
-        const newTask = {
-            label: 'New Task',
-            start: new Date().toISOString().split('T')[0],
-            end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            progress: 0,
-            color: '#0073ea',
-            type: 'Task',
-            expanded: true,
-            parentId: null,
-            weekdays: 5,
-            state: 'none',
-            project_name: projectName,
-            user_id: Auth.user.id,
-            description: ''
-        };
+        const name = prompt('Enter the name of the new project:');
+        if (!name) return;
 
         try {
-            const { error } = await this.supabase.from('tasks').insert([newTask]);
+            // First task to initialize the project
+            const initialTask = {
+                project_name: name,
+                label: 'Project Root',
+                type: 'Project',
+                start: new Date().toISOString().split('T')[0],
+                end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                weekdays: 5,
+                progress: 0,
+                color: '#0073ea',
+                user_id: Auth.user.id
+            };
+
+            const { error } = await this.supabase
+                .from('tasks')
+                .insert(initialTask);
+
             if (error) throw error;
 
-            this.switchProject(projectName);
+            alert(`Project '${name}' created successfully.`);
+            this.switchProject(name);
             this.fetchProjectList();
         } catch (err) {
-            alert('프로젝트 생성 실패: ' + err.message);
+            console.error('Project creation failed:', err.message);
+            alert('Error creating project: ' + err.message);
         }
     }
 
     async deleteProject(projectName) {
         if (!Auth.isAdmin) {
-            alert("관리자만 프로젝트를 삭제할 수 있습니다.");
+            alert("Only administrators can delete projects.");
             return;
         }
 
-        if (!confirm(`'${projectName}' 프로젝트의 모든 데이터가 영구 삭제됩니다. 계속하시겠습니까?`)) {
+        if (!confirm(`All data for project '${projectName}' will be permanently deleted. Continue?`)) {
             return;
         }
 
@@ -357,7 +374,7 @@ class GanttApp {
 
             if (error) throw error;
 
-            alert(`'${projectName}' 프로젝트가 삭제되었습니다.`);
+            alert(`Project '${projectName}' has been deleted.`);
 
             if (this.activeProject === projectName) {
                 this.activeProject = null;
@@ -368,7 +385,7 @@ class GanttApp {
             this.fetchProjectList();
         } catch (err) {
             console.error('Project deletion failed:', err.message);
-            alert('삭제 중 오류가 발생했습니다.');
+            alert('An error occurred during deletion.');
         }
     }
 
@@ -548,7 +565,7 @@ class GanttApp {
         document.getElementById('globalAddTask').onclick = () => this.addNewTask(null);
         document.getElementById('headerNewProjectBtn').onclick = () => this.createNewProject();
 
-        // 프로젝트 목록 드롭다운 관련
+        // Project list dropdown related
         const projectBtn = document.getElementById('showProjectList');
         const projectDropdown = document.getElementById('projectDropdown');
         const appTitle = document.getElementById('appTitle');
@@ -566,7 +583,7 @@ class GanttApp {
 
         projectBtn.onclick = toggleDropdown;
 
-        // 제목 클릭 시에도 드롭다운 (편집 중이 아닐 때)
+        // Dropdown on title click (when not editing)
         appTitle.onclick = (e) => {
             if (document.activeElement !== appTitle) {
                 toggleDropdown(e);
@@ -737,6 +754,19 @@ class GanttApp {
         document.getElementById('editTaskProgress').oninput = (e) => {
             document.getElementById('progressValue').innerText = `${e.target.value}%`;
         };
+
+        // Access Denied Modal Events
+        const closeAccess = document.getElementById('closeAccessDenied');
+        if (closeAccess) {
+            closeAccess.onclick = (e) => {
+                e.preventDefault();
+                document.getElementById('accessDeniedModal').classList.add('hidden');
+            };
+        }
+        const requestBtn = document.getElementById('requestAccessBtn');
+        if (requestBtn) {
+            requestBtn.onclick = () => this.requestAccess();
+        }
     }
 
     shiftView(type, days) {
@@ -903,6 +933,90 @@ class GanttApp {
         this.renderAll();
         this.closeEditModal();
     }
+
+    // --- Access Denied & Request Logic ---
+
+    showAccessDeniedModal(projectName) {
+        const modal = document.getElementById('accessDeniedModal');
+        if (!modal) return;
+
+        this.deniedProject = projectName;
+        document.getElementById('accessDeniedMessage').innerHTML =
+            `You do not have permission to view the <strong>${projectName}</strong> project.<br>Would you like to request access from the administrator?`;
+        modal.classList.remove('hidden');
+    }
+
+    async requestAccess() {
+        if (!this.deniedProject || !Auth.user) return;
+
+        const projectName = this.deniedProject;
+        try {
+            const { error } = await this.supabase
+                .from('user_permissions')
+                .upsert({
+                    user_id: Auth.user.id,
+                    project_name: projectName,
+                    is_approved: false
+                }, { onConflict: 'user_id, project_name' });
+
+            if (error) throw error;
+
+            // Trigger mailto
+            const subject = encodeURIComponent(`Requesting Access for ${projectName}`);
+            const body = encodeURIComponent(`User ${Auth.user.email} is requesting access to project [${projectName}].\nPlease approve in the admin panel.`);
+            window.location.href = `mailto:csyoon@kbautosys.com?subject=${subject}&body=${body}`;
+
+            alert('Access request has been sent to the administrator.');
+            document.getElementById('accessDeniedModal').classList.add('hidden');
+        } catch (err) {
+            console.error('Request Access Error:', err.message);
+            alert('Failed to send request: ' + err.message);
+        }
+    }
+
+    // --- Project Members UI ---
+
+    async renderProjectMembers(projectName) {
+        const container = document.getElementById('projectMembers');
+        if (!container) return;
+        container.innerHTML = '';
+
+        try {
+            // 1. Get approved user IDs for this project
+            const { data: perms, error: permError } = await this.supabase
+                .from('user_permissions')
+                .select('user_id')
+                .eq('project_name', projectName)
+                .eq('is_approved', true);
+
+            if (permError) throw permError;
+            if (!perms || perms.length === 0) return;
+
+            const userIds = perms.map(p => p.user_id);
+
+            // 2. Get profile names for these IDs
+            const { data: profiles, error: profError } = await this.supabase
+                .from('profiles')
+                .select('display_name, full_name, email')
+                .in('id', userIds);
+
+            if (profError) throw profError;
+            if (!profiles) return;
+
+            // 3. Render Avatars
+            profiles.forEach(user => {
+                const name = user.display_name || user.full_name || user.email;
+                const initial = name.charAt(0).toUpperCase();
+                const avatar = document.createElement('div');
+                avatar.className = 'member-avatar';
+                avatar.innerText = initial;
+                avatar.title = `${name} (${user.email})`;
+                container.appendChild(avatar);
+            });
+        } catch (err) {
+            console.error('Error rendering members:', err.message);
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1034,7 +1148,7 @@ const MONDAY_COLORS = [
 ];
 
 /**
- * 7가지 색상 팔레트를 생성하고 클릭 이벤트를 연결하는 함수
+ * Generate a 7-color palette and bind click events
  */
 function generateColorPalette(selectedColor) {
     const container = document.getElementById('colorPalette');
@@ -1042,9 +1156,9 @@ function generateColorPalette(selectedColor) {
 
     if (!container || !hiddenInput) return;
 
-    container.innerHTML = ''; // 초기화
+    container.innerHTML = ''; // Reset
 
-    // 기본값이 없거나 이상하면 파란색(#0073EA)을 기본으로
+    // Default to blue (#0073EA) if color is missing or invalid
     if (!selectedColor || !MONDAY_COLORS.includes(selectedColor)) {
         selectedColor = '#0073EA';
     }
@@ -1059,12 +1173,12 @@ function generateColorPalette(selectedColor) {
             swatch.classList.add('selected');
         }
 
-        // 색상 클릭 이벤트
+        // Color click event
         swatch.onclick = () => {
-            // 모든 선택 해제 후 현재 클릭한 것만 선택
+            // Deselect all and select the current one
             document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
             swatch.classList.add('selected');
-            hiddenInput.value = color; // 숨겨진 input에 값 저장
+            hiddenInput.value = color; // Store value in hidden input
         };
 
         container.appendChild(swatch);

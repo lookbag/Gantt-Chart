@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gantt Project Planner</title>
-    <meta name="description" content="고급 계층형 간트 차트 프로젝트 관리 애플리케이션">
+    <meta name="description" content="Advanced hierarchical Gantt chart for project management">
     <link rel="stylesheet" href="index.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -61,10 +61,13 @@
                 </div>
 
                 <div class="auth-status-container">
-                    <button class="icon-btn" id="adminMenuBtn" style="display:none;" title="관리자 설정"><i
+                    <!-- Project Members List -->
+                    <div id="projectMembers" class="member-list-container"></div>
+
+                    <button class="icon-btn" id="adminMenuBtn" style="display:none;" title="Admin Settings"><i
                             data-lucide="shield-check"></i></button>
                     <div class="user-avatar" id="userAvatar">?</div>
-                    <button class="icon-btn" id="logoutBtn" title="로그아웃"><i data-lucide="log-out"></i></button>
+                    <button class="icon-btn" id="logoutBtn" title="Logout"><i data-lucide="log-out"></i></button>
                 </div>
             </div>
         </header>
@@ -301,13 +304,27 @@
                     </div>
                 </div>
             </div>
-        </div>
+            <!-- Access Denied Modal -->
+            <div id="accessDeniedModal" class="modal-overlay hidden">
+                <div class="modal-content" style="width: 400px;">
+                    <div class="access-denied-header">
+                        <h3><i data-lucide="shield-off"></i> Access Denied</h3>
+                    </div>
+                    <div class="access-denied-body">
+                        <p id="accessDeniedMessage">You do not have permission to view this project. Would you like to
+                            request access from the administrator?</p>
+                        <button id="requestAccessBtn" class="request-access-btn">Request Access</button>
+                        <p style="margin-top: 15px; font-size: 12px;"><a href="#" id="closeAccessDenied"
+                                style="color: #666;">Not now</a></p>
+                    </div>
+                </div>
+            </div>
 
-    </div>
-    <script src="config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="auth.js"></script>
-    <script src="app.js"></script>
+        </div>
+        <script src="config.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        <script src="auth.js"></script>
+        <script src="app.js"></script>
 </body>
 
 </html>

@@ -977,3 +977,80 @@ input[type="range"]::-webkit-slider-thumb {
 .otp-input:focus {
     border-color: var(--success-color) !important;
 }
+
+/* Project Members Avatar Group */
+.member-list-container {
+    display: flex;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.member-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    margin-left: -8px;
+    /* Overlap effect */
+    cursor: help;
+    transition: transform 0.2s;
+    user-select: none;
+}
+
+.member-avatar:first-child {
+    margin-left: 0;
+}
+
+.member-avatar:hover {
+    transform: translateY(-2px);
+    z-index: 10;
+}
+
+/* Access Denied Modal Specifics */
+.access-denied-header {
+    background-color: #fff1f0;
+    border-bottom: 1px solid #ffa39e;
+    padding: 16px 20px;
+}
+
+.access-denied-header h3 {
+    color: var(--danger-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.access-denied-body {
+    padding: 24px;
+    text-align: center;
+}
+
+.access-denied-body p {
+    font-size: 15px;
+    color: var(--text-main);
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.request-access-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.request-access-btn:hover {
+    background-color: #0061c2;
+}
