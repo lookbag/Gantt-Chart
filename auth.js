@@ -8,25 +8,34 @@ const Auth = {
     isAdmin: false,
     user: null,
     mode: 'login', // 'login' or 'register'
+    authSubscription: null,
 
     async init() {
         this.bindEvents();
 
-        // Detect Supabase auth state changes (to capture password reset events)
-        authSuppabase.auth.onAuthStateChange((event, session) => {
+        // Clear existing subscription if any
+        if (this.authSubscription) {
+            this.authSubscription.unsubscribe();
+        }
+
+        // Detect Supabase auth state changes
+        const { data: { subscription } } = authSuppabase.auth.onAuthStateChange(async (event, session) => {
             if (event === 'PASSWORD_RECOVERY') {
-                this.showResetForm(); // Force display reset form in recovery mode
+                this.showResetForm();
             } else if (event === 'SIGNED_IN' && session) {
-                this.handleAuthStateChange(session.user);
+                await this.handleAuthStateChange(session.user);
             } else if (event === 'SIGNED_OUT') {
-                // Handle logout
+                this.isLoggedIn = false;
+                this.user = null;
+                this.isAdmin = false;
             }
         });
 
-        // Initial session check
+        this.authSubscription = subscription;
+
         const { data: { session } } = await authSuppabase.auth.getSession();
         if (session && !window.location.hash.includes('type=recovery')) {
-            this.handleAuthStateChange(session.user);
+            await this.handleAuthStateChange(session.user);
         } else if (!session) {
             this.showAuthModal();
         }
@@ -43,9 +52,7 @@ const Auth = {
 
         // OTP helpers
         if (document.getElementById('resendOtp')) {
-            document.getElementById('resendOtp').onclick = () => {
-                alert("If you haven't received the code, please try signing up again or contact admin.");
-            };
+            document.getElementById('resendOtp').onclick = () => this.resendOtp();
         }
         if (document.getElementById('cancelOtp')) {
             document.getElementById('cancelOtp').onclick = () => this.showLoginForm();
@@ -163,6 +170,21 @@ const Auth = {
         }
     },
 
+    async resendOtp() {
+        const id = document.getElementById('userAccount').value.trim();
+        const email = id + '@kbautosys.com';
+        try {
+            const { error } = await authSuppabase.auth.resend({
+                type: 'signup',
+                email: email
+            });
+            if (error) throw error;
+            alert("Verification code resent successfully.");
+        } catch (err) {
+            alert("Failed to resend code: " + err.message);
+        }
+    },
+
     async login() {
         const id = document.getElementById('userAccount').value.trim();
         const email = id + '@kbautosys.com';
@@ -221,12 +243,42 @@ const Auth = {
         }
     },
 
+    async checkAdminStatus(email) {
+        try {
+            const { data, error } = await authSuppabase
+                .from('admin_users')
+                .select('email')
+                .eq('email', email)
+                .maybeSingle();
+
+            if (error) throw error;
+            return !!data;
+        } catch (err) {
+            console.error('Admin Check Error:', err);
+            return false;
+        }
+    },
+
+    async getAdminEmails() {
+        try {
+            const { data, error } = await authSuppabase
+                .from('admin_users')
+                .select('email');
+
+            if (error) throw error;
+            return data.map(admin => admin.email);
+        } catch (err) {
+            console.error('Error fetching admin emails:', err);
+            return ['csyoon@kbautosys.com']; // Fallback
+        }
+    },
+
     async handleAuthStateChange(user) {
         this.user = user;
         this.isLoggedIn = true;
-        this.isAdmin = user.email === 'csyoon@kbautosys.com'; // Confirm Admin Permission
+        this.isAdmin = await this.checkAdminStatus(user.email);
 
-        // [수정된 부분] 비밀번호 재설정 중이 아닐 때만 모달을 닫음
+        // Only close modal if not in recovery mode
         if (!window.location.hash.includes('type=recovery')) {
             document.getElementById('authModal').classList.add('hidden');
         }
@@ -235,6 +287,8 @@ const Auth = {
 
         if (this.isAdmin) {
             document.getElementById('adminMenuBtn').style.display = 'flex';
+        } else {
+            document.getElementById('adminMenuBtn').style.display = 'none';
         }
 
         // Initialize App after auth

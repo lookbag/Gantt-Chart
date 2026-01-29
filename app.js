@@ -2,6 +2,21 @@
  * Gantt Application Logic with Supabase Integration
  */
 
+// Monday.com Tones (Red, Orange, Yellow, Green, Blue, Indigo, Violet)
+const MONDAY_COLORS = [
+    '#E2445C', // Red
+    '#FF9F00', // Orange
+    '#FFCB00', // Yellow
+    '#00C875', // Green
+    '#0073EA', // Blue
+    '#579BFC', // Indigo (Dark Blue)
+    '#A25DDC'  // Violet (Purple)
+];
+
+// Global Permission Cache (Expires in 5 minutes)
+const permissionCache = new Map();
+const CACHE_EXPIRY_MS = 5 * 60 * 1000;
+
 class GanttApp {
     constructor() {
         // Check if CONFIG is defined
@@ -52,9 +67,14 @@ class GanttApp {
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'tasks' },
                 (payload) => {
-                    console.log('Realtime change detected:', payload);
-                    // Minimal reloading - you could check payload.new.user_id if needed
-                    this.loadTasks();
+                    const currentProject = this.activeProject ? this.activeProject.trim().toLowerCase() : null;
+                    const changeProject = (payload.new?.project_name || payload.old?.project_name)?.trim().toLowerCase();
+
+                    // Update only if the change belongs to the active project
+                    if (currentProject && changeProject === currentProject) {
+                        console.log('Realtime change detected for active project:', payload);
+                        this.loadTasks();
+                    }
                 }
             )
             .subscribe();
@@ -122,6 +142,14 @@ class GanttApp {
 
     async checkPermission(userId, projectName) {
         const trimmedName = projectName ? projectName.trim() : "";
+        const cacheKey = `${userId}:${trimmedName.toLowerCase()}`;
+
+        // Check Cache
+        const cached = permissionCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < CACHE_EXPIRY_MS)) {
+            return cached.value;
+        }
+
         try {
             const { data, error } = await this.supabase
                 .from('user_permissions')
@@ -131,13 +159,22 @@ class GanttApp {
                 .eq('is_approved', true)
                 .maybeSingle();
 
-            if (!data) {
+            if (error) throw error;
+
+            const hasPermission = !!data;
+            // Update Cache
+            permissionCache.set(cacheKey, {
+                value: hasPermission,
+                timestamp: Date.now()
+            });
+
+            if (!hasPermission) {
                 console.warn(`[Permission Denied] User: ${userId}, Project: ${trimmedName}`);
             } else {
                 console.log(`[Permission Granted] User: ${userId}, Project: ${trimmedName}`);
             }
 
-            return !!data;
+            return hasPermission;
         } catch (err) {
             console.error('[Permission Check Error]', err);
             return false;
@@ -150,7 +187,7 @@ class GanttApp {
         try {
             const projectName = document.getElementById('appTitle').innerText.trim();
 
-            // Permission Check (Refined)
+            // Permission Check
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
@@ -159,14 +196,12 @@ class GanttApp {
                 }
             }
 
-            // Add project name and user ID to data
             const taskWithMeta = {
                 ...task,
                 project_name: projectName,
                 user_id: Auth.user.id
             };
 
-            // Clean upsert logic (includes description fallback)
             const performUpsert = async (dataToSync) => {
                 const { error: upsertError } = await this.supabase
                     .from('tasks')
@@ -181,8 +216,11 @@ class GanttApp {
 
             const { error: finalError } = await performUpsert(taskWithMeta);
             if (finalError) throw finalError;
+
+            this.showToast('Project synced successfully', 'success');
         } catch (err) {
             console.error('Error syncing task:', err.message);
+            this.showToast('Sync failed: ' + err.message, 'error');
         }
     }
 
@@ -422,9 +460,21 @@ class GanttApp {
         const renderItem = (task, depth = 0) => {
             if (task.rowTaskId) return;
 
-            const matchesFilter = task.label.toLowerCase().includes(filter);
-            const hasVisibleChildren = this.tasks.some(t => t.parentId === task.id && (t.label.toLowerCase().includes(filter) || filter === ''));
-            const hasVisibleSegments = this.tasks.some(t => t.rowTaskId === task.id && t.label.toLowerCase().includes(filter));
+            const matchesFilter = task.label.toLowerCase().includes(filter) ||
+                (task.description && task.description.toLowerCase().includes(filter));
+
+            const hasVisibleChildren = this.tasks.some(t =>
+                t.parentId === task.id &&
+                (t.label.toLowerCase().includes(filter) ||
+                    (t.description && t.description.toLowerCase().includes(filter)) ||
+                    filter === '')
+            );
+
+            const hasVisibleSegments = this.tasks.some(t =>
+                t.rowTaskId === task.id &&
+                (t.label.toLowerCase().includes(filter) ||
+                    (t.description && t.description.toLowerCase().includes(filter)))
+            );
 
             if (filter !== '' && !matchesFilter && !hasVisibleChildren && !hasVisibleSegments) return;
 
@@ -494,9 +544,21 @@ class GanttApp {
 
         const collectVisible = (parentId = null) => {
             this.tasks.filter(t => t.parentId === parentId && !t.rowTaskId).forEach(t => {
-                const matches = t.label.toLowerCase().includes(filter);
-                const sameRowMatches = this.tasks.some(s => s.rowTaskId === t.id && s.label.toLowerCase().includes(filter));
-                const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && (child.label.toLowerCase().includes(filter) || filter === ''));
+                const matches = t.label.toLowerCase().includes(filter) ||
+                    (t.description && t.description.toLowerCase().includes(filter));
+
+                const sameRowMatches = this.tasks.some(s =>
+                    s.rowTaskId === t.id &&
+                    (s.label.toLowerCase().includes(filter) ||
+                        (s.description && s.description.toLowerCase().includes(filter)))
+                );
+
+                const hasVisibleChild = this.tasks.some(child =>
+                    child.parentId === t.id &&
+                    (child.label.toLowerCase().includes(filter) ||
+                        (child.description && child.description.toLowerCase().includes(filter)) ||
+                        filter === '')
+                );
 
                 if (filter === '' || matches || sameRowMatches || hasVisibleChild) {
                     mainVisibleTasks.push(t);
@@ -604,7 +666,7 @@ class GanttApp {
             }
         };
 
-        // 제목 편집 가능하게 유지
+        // Keep the title editable
         appTitle.addEventListener('blur', () => {
             const newName = document.getElementById('appTitle').innerText.trim();
             if (this.activeProject !== newName && newName !== '') {
@@ -612,7 +674,7 @@ class GanttApp {
             }
         });
 
-        // 엔터 키를 눌렀을 때도 저장 및 로드
+        // Save and load on Enter key press
         document.getElementById('appTitle').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -620,7 +682,7 @@ class GanttApp {
             }
         });
 
-        // 외부(전역) 클릭 시 닫기
+        // Close on external (global) click
         window.addEventListener('click', (e) => {
             if (document.getElementById('projectDropdown')) {
                 document.getElementById('projectDropdown').classList.add('hidden');
@@ -686,7 +748,7 @@ class GanttApp {
                 task.end = new Date(endMs).toISOString().split('T')[0];
                 task.weekdays = this.calculateWeekdays(task.start, task.end);
 
-                await this.syncTask(task); // Supabase 동기화
+                await this.syncTask(task); // Supabase Sync
             }
 
             isInteracting = false;
@@ -709,7 +771,7 @@ class GanttApp {
                 return;
             }
 
-            // 수정: more-btn 클릭 감지 강화
+            // Enhance more-btn click detection logic
             const moreBtn = e.target.closest('.more-btn');
             if (moreBtn) {
                 e.stopPropagation();
@@ -795,7 +857,7 @@ class GanttApp {
         menu.style.left = `${e.clientX}px`;
         menu.style.top = `${e.clientY}px`;
         menu.dataset.taskId = taskId;
-        lucide.createIcons(); // 아이콘 재생성 확인
+        lucide.createIcons(); // Refresh icons
     }
 
     hideContextMenu() {
@@ -813,263 +875,329 @@ class GanttApp {
             case 'copy': console.log('Copy'); break;
             case 'paste': console.log('Paste'); break;
             case 'template': console.log('Template'); break;
-            case 'openAttachment': console.log('Attachment'); break;
         }
     }
 
-    const projectName = document.getElementById('appTitle').innerText.trim();
+    async addNewTask(parentId = null, rowTaskId = null) {
+        const projectName = document.getElementById('appTitle').innerText.trim();
 
-    // Permission Check
-    if(!Auth.isAdmin) {
-        const hasPermission = await this.checkPermission(Auth.user.id, projectName);
-        if (!hasPermission) {
-            this.showAccessDeniedModal(projectName);
-            return;
+        // Permission Check
+        if (!Auth.isAdmin) {
+            const hasPermission = await this.checkPermission(Auth.user.id, projectName);
+            if (!hasPermission) {
+                this.showAccessDeniedModal(projectName);
+                return;
+            }
         }
-    }
 
-    const newTask = {
-        label: rowTaskId ? 'Subtask' : (parentId ? 'New Subtask' : 'New Project'),
-        start: '2026-03-01',
-        end: '2026-03-15',
-        progress: 0,
-        color: '#0084d1',
-        type: 'Task',
-        expanded: true,
-        parentId: parentId,
-        rowTaskId: rowTaskId,
-        weekdays: 10,
-        state: 'none',
-        project_name: projectName,
-        user_id: Auth.user.id, // Include author ID
-        description: ''
-    };
+        const newTask = {
+            label: rowTaskId ? 'Subtask' : (parentId ? 'New Subtask' : 'New Project'),
+            start: '2026-03-01',
+            end: '2026-03-15',
+            progress: 0,
+            color: '#0084d1',
+            type: 'Task',
+            expanded: true,
+            parentId: parentId,
+            rowTaskId: rowTaskId,
+            weekdays: 10,
+            state: 'none',
+            project_name: projectName,
+            user_id: Auth.user.id, // Include author ID
+            description: ''
+        };
 
         try {
-    const performInsert = async (dataToInsert) => {
-        const { data: insertData, error: insertError } = await this.supabase
-            .from('tasks')
-            .insert([dataToInsert])
-            .select();
+            const performInsert = async (dataToInsert) => {
+                const { data: insertData, error: insertError } = await this.supabase
+                    .from('tasks')
+                    .insert([dataToInsert])
+                    .select();
 
-        if (insertError && insertError.message.includes('description')) {
-            const { description, ...dataWithoutDesc } = dataToInsert;
-            return await this.supabase.from('tasks').insert([dataWithoutDesc]).select();
+                if (insertError && insertError.message.includes('description')) {
+                    const { description, ...dataWithoutDesc } = dataToInsert;
+                    return await this.supabase.from('tasks').insert([dataWithoutDesc]).select();
+                }
+                return { data: insertData, error: insertError };
+            };
+
+            let { data, error } = await performInsert(newTask);
+            if (error) throw error;
+
+            const createdTask = data[0];
+            this.tasks.push(createdTask);
+            this.renderAll();
+            this.openEditModal(createdTask.id);
+        } catch (err) {
+            console.error('Error adding task:', err.message);
+            alert('Failed to add task: ' + err.message);
         }
-        return { data: insertData, error: insertError };
-    };
-
-    let { data, error } = await performInsert(newTask);
-    if (error) throw error;
-
-    const createdTask = data[0];
-    this.tasks.push(createdTask);
-    this.renderAll();
-    this.openEditModal(createdTask.id);
-} catch (err) {
-    console.error('Error adding task:', err.message);
-    alert('Failed to add task: ' + err.message);
-}
     }
 
     async deleteTask(id) {
-    if (!Auth.isAdmin) {
-        alert("Permission Denied: Only administrators can delete tasks.");
-        return;
-    }
-
-    if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
-        return;
-    }
-
-    await this.deleteFromSupabase(id);
-    const sid = String(id);
-    this.tasks = this.tasks.filter(t =>
-        String(t.id) !== sid && String(t.parentId) !== sid && String(t.rowTaskId) !== sid
-    );
-    this.renderAll();
-}
-
-    async moveTask(id, dir) {
-    const projectName = document.getElementById('appTitle').innerText.trim();
-    if (!Auth.isAdmin) {
-        const hasPermission = await this.checkPermission(Auth.user.id, projectName);
-        if (!hasPermission) {
-            this.showAccessDeniedModal(projectName);
+        if (!Auth.isAdmin) {
+            alert("Permission Denied: Only administrators can delete tasks.");
             return;
         }
+
+        if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
+            return;
+        }
+
+        await this.deleteFromSupabase(id);
+        const sid = String(id);
+        this.tasks = this.tasks.filter(t =>
+            String(t.id) !== sid && String(t.parentId) !== sid && String(t.rowTaskId) !== sid
+        );
+        this.renderAll();
     }
 
-    const sid = String(id);
-    const index = this.tasks.findIndex(t => String(t.id) === sid);
-    if (index === -1) return;
-    const newIndex = index + dir;
-    if (newIndex < 0 || newIndex >= this.tasks.length) return;
-
-    const temp = this.tasks[index];
-    this.tasks[index] = this.tasks[newIndex];
-    this.tasks[newIndex] = temp;
-
-    // In a production app, you would update a 'sort_order' column here.
-    // For now, we update in-memory only for visual feedback.
-    this.renderAll();
-}
-
-openEditModal(taskId) {
-    const task = this.tasks.find(t => String(t.id) === String(taskId));
-    if (!task) return;
-
-    this.editingTaskId = taskId;
-    document.getElementById('editTaskLabel').value = task.label;
-    document.getElementById('editTaskStart').value = task.start;
-    document.getElementById('editTaskEnd').value = task.end;
-    document.getElementById('editTaskWeekdays').value = task.weekdays;
-    document.getElementById('editTaskProgress').value = task.progress;
-    document.getElementById('progressValue').innerText = `${task.progress}%`;
-    document.getElementById('editTaskType').value = task.type;
-    document.getElementById('editTaskState').value = task.state;
-    document.getElementById('editTaskDescription').value = task.description || '';
-
-    // [New] 컬러 팔레트 생성 함수 호출
-    generateColorPalette(task.color);
-
-    // [Permission Check] Hide editing actions if read-only
-    const footerButtons = ['saveTask', 'deleteTask'];
-    footerButtons.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-            btn.style.display = this.canWrite ? 'block' : 'none';
+    async moveTask(id, dir) {
+        const projectName = document.getElementById('appTitle').innerText.trim();
+        if (!Auth.isAdmin) {
+            const hasPermission = await this.checkPermission(Auth.user.id, projectName);
+            if (!hasPermission) {
+                this.showAccessDeniedModal(projectName);
+                return;
+            }
         }
-    });
 
-    document.getElementById('editModal').classList.remove('hidden');
-}
+        const sid = String(id);
+        const index = this.tasks.findIndex(t => String(t.id) === sid);
+        if (index === -1) return;
+        const newIndex = index + dir;
+        if (newIndex < 0 || newIndex >= this.tasks.length) return;
 
-closeEditModal() {
-    document.getElementById('editModal').classList.add('hidden');
-    this.editingTaskId = null;
-}
+        const temp = this.tasks[index];
+        this.tasks[index] = this.tasks[newIndex];
+        this.tasks[newIndex] = temp;
+
+        // In a production app, you would update a 'sort_order' column here.
+        // For now, we update in-memory only for visual feedback.
+        this.renderAll();
+    }
+
+    openEditModal(taskId) {
+        const task = this.tasks.find(t => String(t.id) === String(taskId));
+        if (!task) return;
+
+        this.editingTaskId = taskId;
+        document.getElementById('editTaskLabel').value = task.label;
+        document.getElementById('editTaskStart').value = task.start;
+        document.getElementById('editTaskEnd').value = task.end;
+        document.getElementById('editTaskWeekdays').value = task.weekdays;
+        document.getElementById('editTaskProgress').value = task.progress;
+        document.getElementById('progressValue').innerText = `${task.progress}%`;
+        document.getElementById('editTaskType').value = task.type;
+        document.getElementById('editTaskState').value = task.state;
+        document.getElementById('editTaskDescription').value = task.description || '';
+
+        // [New] 컬러 팔레트 생성 함수 호출
+        this.generateColorPalette(task.color);
+
+        // [Permission Check] Hide editing actions if read-only
+        const footerButtons = ['saveTask', 'deleteTask'];
+        footerButtons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.style.display = this.canWrite ? 'block' : 'none';
+            }
+        });
+
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    closeEditModal() {
+        document.getElementById('editModal').classList.add('hidden');
+        this.editingTaskId = null;
+    }
 
     async saveTask() {
-    if (!this.editingTaskId) return;
-    const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
+        if (!this.editingTaskId) return;
+        const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
 
-    task.label = document.getElementById('editTaskLabel').value;
-    task.start = document.getElementById('editTaskStart').value;
-    task.end = document.getElementById('editTaskEnd').value;
-    task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
-    task.progress = parseInt(document.getElementById('editTaskProgress').value);
-    task.type = document.getElementById('editTaskType').value;
-    task.state = document.getElementById('editTaskState').value;
-    task.description = document.getElementById('editTaskDescription').value;
+        try {
+            task.label = document.getElementById('editTaskLabel').value;
+            task.start = document.getElementById('editTaskStart').value;
+            task.end = document.getElementById('editTaskEnd').value;
+            task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
+            task.progress = parseInt(document.getElementById('editTaskProgress').value);
+            task.type = document.getElementById('editTaskType').value;
+            task.state = document.getElementById('editTaskState').value;
+            task.description = document.getElementById('editTaskDescription').value;
 
-    // [New] 선택된 컬러 값을 가져와서 저장
-    const selectedColor = document.getElementById('editTaskColorValue').value;
-    if (selectedColor) {
-        task.color = selectedColor;
+            const selectedColor = document.getElementById('editTaskColorValue').value;
+            if (selectedColor) {
+                task.color = selectedColor;
+            }
+
+            await this.syncTask(task);
+            this.renderAll();
+            this.closeEditModal();
+        } catch (err) {
+            console.error('Error saving task:', err.message);
+            this.showToast('Failed to save: ' + err.message, 'error');
+        }
     }
 
-    await this.syncTask(task);
-    this.renderAll();
-    this.closeEditModal();
-}
+    /**
+     * Show Toast Notification
+     */
+    showToast(msg, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}"></i>
+            <span>${msg}</span>
+        `;
+        document.body.appendChild(toast);
+        lucide.createIcons();
 
-// --- Access Denied & Request Logic ---
+        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
 
-showAccessDeniedModal(projectName) {
-    const modal = document.getElementById('accessDeniedModal');
-    if (!modal) return;
+    // --- Access Denied & Request Logic ---
 
-    this.deniedProject = projectName;
-    document.getElementById('accessDeniedMessage').innerHTML =
-        `You do not have permission to view the <strong>${projectName}</strong> project.<br>Would you like to request access from the administrator?`;
-    modal.classList.remove('hidden');
-}
+    showAccessDeniedModal(projectName) {
+        const modal = document.getElementById('accessDeniedModal');
+        if (!modal) return;
+
+        this.deniedProject = projectName;
+        document.getElementById('accessDeniedMessage').innerHTML =
+            `You do not have permission to view the <strong>${projectName}</strong> project.<br>Would you like to request access from the administrator?`;
+        modal.classList.remove('hidden');
+    }
 
     async requestAccess() {
-    if (!this.deniedProject || !Auth.user) return;
+        if (!this.deniedProject || !Auth.user) return;
 
-    const projectName = this.deniedProject;
-    try {
-        const { error } = await this.supabase
-            .from('user_permissions')
-            .upsert({
-                user_id: Auth.user.id,
-                project_name: projectName,
-                is_approved: false
-            }, { onConflict: 'user_id, project_name' });
+        const projectName = this.deniedProject;
+        try {
+            const { error } = await this.supabase
+                .from('user_permissions')
+                .upsert({
+                    user_id: Auth.user.id,
+                    project_name: projectName,
+                    is_approved: false
+                }, { onConflict: 'user_id, project_name' });
 
-        if (error) throw error;
+            if (error) throw error;
 
-        // Trigger mailto
-        const subject = encodeURIComponent(`Requesting Access for ${projectName}`);
-        const body = encodeURIComponent(`User ${Auth.user.email} is requesting access to project [${projectName}].\nPlease approve in the admin panel.`);
-        window.location.href = `mailto:csyoon@kbautosys.com?subject=${subject}&body=${body}`;
+            // Fetch dynamic admin emails
+            const adminEmails = await Auth.getAdminEmails();
+            const recipient = adminEmails.length > 0 ? adminEmails.join(',') : 'csyoon@kbautosys.com';
 
-        alert('Access request has been sent to the administrator.');
-        document.getElementById('accessDeniedModal').classList.add('hidden');
-    } catch (err) {
-        console.error('Request Access Error:', err.message);
-        alert('Failed to send request: ' + err.message);
+            // Trigger mailto
+            const subject = encodeURIComponent(`Requesting Access for ${projectName}`);
+            const body = encodeURIComponent(`User ${Auth.user.email} is requesting access to project [${projectName}].\nPlease approve in the admin panel.`);
+            window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+
+            this.showToast('Access request sent to administrator', 'success');
+            document.getElementById('accessDeniedModal').classList.add('hidden');
+        } catch (err) {
+            console.error('Request Access Error:', err.message);
+            alert('Failed to send request: ' + err.message);
+        }
     }
-}
 
     // --- Project Members UI ---
 
     async renderProjectMembers(projectName) {
-    const trimmedName = projectName ? projectName.trim() : "";
-    const container = document.getElementById('projectMembers');
-    if (!container) return;
-    container.innerHTML = '';
+        const trimmedName = projectName ? projectName.trim() : "";
+        const container = document.getElementById('projectMembers');
+        if (!container) return;
+        container.innerHTML = '';
 
-    try {
-        // 1. Get approved user IDs for this project (Case-insensitive)
-        const { data: perms, error: permError } = await this.supabase
-            .from('user_permissions')
-            .select('user_id')
-            .ilike('project_name', trimmedName)
-            .eq('is_approved', true);
+        try {
+            // 1. Get approved user IDs for this project (Case-insensitive)
+            const { data: perms, error: permError } = await this.supabase
+                .from('user_permissions')
+                .select('user_id')
+                .ilike('project_name', trimmedName)
+                .eq('is_approved', true);
 
-        if (permError) throw permError;
-        if (!perms || perms.length === 0) return;
+            if (permError) throw permError;
+            if (!perms || perms.length === 0) return;
 
-        const userIds = perms.map(p => p.user_id);
+            const userIds = perms.map(p => p.user_id);
 
-        // 2. Get profile names for these IDs
-        const { data: profiles, error: profError } = await this.supabase
-            .from('profiles')
-            .select('id, display_name, full_name, email')
-            .in('id', userIds);
+            // 2. Get profile names for these IDs
+            const { data: profiles, error: profError } = await this.supabase
+                .from('profiles')
+                .select('id, display_name, full_name, email')
+                .in('id', userIds);
 
-        if (profError) throw profError;
+            if (profError) throw profError;
 
-        // 3. Render Avatars with fallback for missing profiles
-        userIds.forEach(uid => {
-            const profile = profiles ? profiles.find(p => p.id === uid) : null;
-            let name = "User";
-            let initials = "US";
+            // 3. Render Avatars with fallback for missing profiles
+            userIds.forEach(uid => {
+                const profile = profiles ? profiles.find(p => p.id === uid) : null;
+                let name = "User";
+                let initials = "US";
 
-            if (profile) {
-                name = profile.display_name || profile.full_name || profile.email || "User";
-                if (profile.display_name || profile.full_name) {
-                    initials = (profile.display_name || profile.full_name).charAt(0).toUpperCase();
-                } else if (profile.email) {
-                    initials = profile.email.substring(0, 2).toUpperCase();
-                } else {
-                    initials = name.charAt(0).toUpperCase();
+                if (profile) {
+                    name = profile.display_name || profile.full_name || profile.email || "User";
+                    if (profile.display_name || profile.full_name) {
+                        initials = (profile.display_name || profile.full_name).charAt(0).toUpperCase();
+                    } else if (profile.email) {
+                        initials = profile.email.substring(0, 2).toUpperCase();
+                    } else {
+                        initials = name.charAt(0).toUpperCase();
+                    }
                 }
+
+                const avatar = document.createElement('div');
+                avatar.className = 'member-avatar';
+                avatar.innerText = initials;
+                avatar.title = profile ? `${name} (${profile.email || 'No email'})` : `Member ID: ${uid}`;
+                container.appendChild(avatar);
+            });
+        } catch (err) {
+            console.error('Error rendering members:', err.message);
+        }
+    }
+
+    /**
+     * Generate a 7-color palette and bind click events
+     */
+    generateColorPalette(selectedColor) {
+        const container = document.getElementById('colorPalette');
+        const hiddenInput = document.getElementById('editTaskColorValue');
+
+        if (!container || !hiddenInput) return;
+
+        container.innerHTML = ''; // Reset
+
+        // Default to blue (#0073EA) if color is missing or invalid
+        if (!selectedColor || !MONDAY_COLORS.includes(selectedColor)) {
+            selectedColor = '#0073EA';
+        }
+        hiddenInput.value = selectedColor;
+
+        MONDAY_COLORS.forEach(color => {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = color;
+
+            if (color === selectedColor) {
+                swatch.classList.add('selected');
             }
 
-            const avatar = document.createElement('div');
-            avatar.className = 'member-avatar';
-            avatar.innerText = initials;
-            avatar.title = profile ? `${name} (${profile.email || 'No email'})` : `Member ID: ${uid}`;
-            container.appendChild(avatar);
+            // Color click event
+            swatch.onclick = () => {
+                // Deselect all and select the current one
+                document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+                swatch.classList.add('selected');
+                hiddenInput.value = color; // Store value in hidden input
+            };
+
+            container.appendChild(swatch);
         });
-    } catch (err) {
-        console.error('Error rendering members:', err.message);
     }
-}
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1187,53 +1315,4 @@ async function executeGrantPermission(userId) {
     }
 }
 
-// --- [Color Logic Add-on] Monday.com Palette ---
 
-// Monday.com Tones (Red, Orange, Yellow, Green, Blue, Indigo, Violet)
-const MONDAY_COLORS = [
-    '#E2445C', // Red
-    '#FF9F00', // Orange
-    '#FFCB00', // Yellow
-    '#00C875', // Green
-    '#0073EA', // Blue
-    '#579BFC', // Indigo (Dark Blue)
-    '#A25DDC'  // Violet (Purple)
-];
-
-/**
- * Generate a 7-color palette and bind click events
- */
-function generateColorPalette(selectedColor) {
-    const container = document.getElementById('colorPalette');
-    const hiddenInput = document.getElementById('editTaskColorValue');
-
-    if (!container || !hiddenInput) return;
-
-    container.innerHTML = ''; // Reset
-
-    // Default to blue (#0073EA) if color is missing or invalid
-    if (!selectedColor || !MONDAY_COLORS.includes(selectedColor)) {
-        selectedColor = '#0073EA';
-    }
-    hiddenInput.value = selectedColor;
-
-    MONDAY_COLORS.forEach(color => {
-        const swatch = document.createElement('div');
-        swatch.className = 'color-swatch';
-        swatch.style.backgroundColor = color;
-
-        if (color === selectedColor) {
-            swatch.classList.add('selected');
-        }
-
-        // Color click event
-        swatch.onclick = () => {
-            // Deselect all and select the current one
-            document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
-            swatch.classList.add('selected');
-            hiddenInput.value = color; // Store value in hidden input
-        };
-
-        container.appendChild(swatch);
-    });
-}
