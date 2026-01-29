@@ -1104,8 +1104,3 @@ input[type="range"]::-webkit-slider-thumb {
     font-weight: 500;
     color: var(--text-main);
 }
-
-/* --- Utils (Ensure this is at the end) --- */
-.hidden {
-    display: none !important;
-}

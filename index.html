@@ -304,29 +304,27 @@
                     </div>
                 </div>
             </div>
-        </div>
-        <!-- Access Denied Modal -->
-        <div id="accessDeniedModal" class="modal-overlay hidden">
-            <div class="modal-content" style="width: 400px;">
-                <div class="access-denied-header">
-                    <h3><i data-lucide="shield-off"></i> Access Denied</h3>
-                </div>
-                <div class="access-denied-body">
-                    <p id="accessDeniedMessage">You do not have permission to view this project. Would you like to
-                        request access from the administrator?</p>
-                    <button id="requestAccessBtn" class="request-access-btn">Request Access</button>
-                    <p style="margin-top: 15px; font-size: 12px;"><a href="#" id="closeAccessDenied"
-                            style="color: #666;">Not now</a></p>
+            <!-- Access Denied Modal -->
+            <div id="accessDeniedModal" class="modal-overlay hidden">
+                <div class="modal-content" style="width: 400px;">
+                    <div class="access-denied-header">
+                        <h3><i data-lucide="shield-off"></i> Access Denied</h3>
+                    </div>
+                    <div class="access-denied-body">
+                        <p id="accessDeniedMessage">You do not have permission to view this project. Would you like to
+                            request access from the administrator?</p>
+                        <button id="requestAccessBtn" class="request-access-btn">Request Access</button>
+                        <p style="margin-top: 15px; font-size: 12px;"><a href="#" id="closeAccessDenied"
+                                style="color: #666;">Not now</a></p>
+                    </div>
                 </div>
             </div>
+
         </div>
         <script>
             // 1. 에러 발생 시 화면에 알림창 띄우기 (디버깅용)
             window.onerror = function (message, source, lineno, colno, error) {
                 alert('Critical Error: ' + message + '\nLine: ' + lineno);
-            };
-            window.onunhandledrejection = function (event) {
-                alert('Unhandled Promise Error: ' + event.reason);
             };
             // 2. 설정값을 window 객체에 직접 할당 (범위 문제 해결)
             window.CONFIG = {
