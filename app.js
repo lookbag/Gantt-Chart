@@ -19,13 +19,11 @@ const CACHE_EXPIRY_MS = 5 * 60 * 1000;
 
 class GanttApp {
     constructor() {
-        // [수정] window.sbClient를 우선 사용합니다.
         if (window.sbClient) {
             this.supabase = window.sbClient;
         } else {
-            // 비상용 (실행될 일 없음)
-            if (typeof CONFIG === 'undefined') return;
-            this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+            console.error("Supabase client missing in app.js");
+            return;
         }
 
         this.tasks = [];

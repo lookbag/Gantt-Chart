@@ -1,9 +1,7 @@
-// [수정] 새로 만들지 않고 index.html에서 만든 것을 가져옵니다.
 const authSuppabase = window.sbClient;
 
 if (!authSuppabase) {
-    console.error("Critical: Supabase client missing");
-    alert("System Error: Please refresh the page.");
+    console.error("Supabase client not found in auth.js");
 }
 
 const Auth = {
@@ -14,9 +12,10 @@ const Auth = {
 
     async init() {
         console.log("Auth init started...");
-        this.bindEvents();
+        this.bindEvents(); // [중요] 버튼 이벤트 먼저 연결하여 UI 먹통 방지
 
-        // 안전장치: 네트워크 문제로 멈추는 것을 방지
+        if (!authSuppabase) return;
+
         try {
             // 세션 상태 감지
             authSuppabase.auth.onAuthStateChange(async (event, session) => {
@@ -32,20 +31,15 @@ const Auth = {
 
             // 현재 세션 확인
             const { data, error } = await authSuppabase.auth.getSession();
-
             if (error) throw error;
 
             if (data.session) {
-                console.log("User found:", data.session.user.email);
                 await this.handleAuthStateChange(data.session.user);
             } else {
-                console.log("No user session. Showing login.");
                 this.showAuthModal();
             }
-
         } catch (err) {
             console.error("Auth Init Error:", err);
-            // 에러가 나도 로그아웃은 가능하게 처리
             this.showAuthModal();
         }
     },
