@@ -4,7 +4,7 @@
 
 class GanttApp {
     constructor() {
-        // Check if CONFIG is defined
+        // CONFIG가 정의되어 있는지 확인
         if (typeof CONFIG === 'undefined') {
             console.error('config.js file not found.');
             return;
@@ -154,14 +154,14 @@ class GanttApp {
                 }
             }
 
-            // Add project name and user ID to data
+            // 데이터에 프로젝트 이름 및 사용자 ID 추가
             const taskWithMeta = {
                 ...task,
                 project_name: projectName,
                 user_id: Auth.user.id
             };
 
-            // Clean upsert logic (includes description fallback)
+            // 깔끔한 upsert 로직 (description fallback 포함)
             const performUpsert = async (dataToSync) => {
                 const { error: upsertError } = await this.supabase
                     .from('tasks')
@@ -243,19 +243,17 @@ class GanttApp {
 
     async fetchProjectList() {
         try {
-            // 1. Fetch ALL distinct project names from tasks table
             const { data: taskData, error: taskError } = await this.supabase
                 .from('tasks')
                 .select('project_name');
 
             if (taskError) throw taskError;
 
-            // Generate unique project list
             const uniqueProjects = [...new Set(taskData.map(item => item.project_name))].filter(Boolean).sort();
 
-            // 2. Fetch current user's approved projects
+            // Fetch current user's approved projects
             let approvedProjects = [];
-            if (Auth.user) {
+            if (!Auth.isAdmin && Auth.user) {
                 const { data: permData } = await this.supabase
                     .from('user_permissions')
                     .select('project_name')
@@ -264,12 +262,6 @@ class GanttApp {
                 if (permData) approvedProjects = permData.map(p => p.project_name);
             }
 
-            // 3. Admin sees all projects as approved
-            if (Auth.isAdmin) {
-                approvedProjects = uniqueProjects;
-            }
-
-            // 4. Render the list with lock state logic
             this.renderProjectDropdown(uniqueProjects, approvedProjects);
         } catch (err) {
             console.error('Project list fetch failed:', err.message);
@@ -1005,21 +997,20 @@ class GanttApp {
             // 2. Get profile names for these IDs
             const { data: profiles, error: profError } = await this.supabase
                 .from('profiles')
-                .select('id, display_name, full_name, email')
+                .select('display_name, full_name, email')
                 .in('id', userIds);
 
             if (profError) throw profError;
+            if (!profiles) return;
 
-            // 3. Render Avatars with fallback for missing profiles
-            userIds.forEach(uid => {
-                const profile = profiles ? profiles.find(p => p.id === uid) : null;
-                const name = profile ? (profile.display_name || profile.full_name || profile.email) : `User`;
+            // 3. Render Avatars
+            profiles.forEach(user => {
+                const name = user.display_name || user.full_name || user.email;
                 const initial = name.charAt(0).toUpperCase();
-
                 const avatar = document.createElement('div');
                 avatar.className = 'member-avatar';
                 avatar.innerText = initial;
-                avatar.title = profile ? `${name} (${profile.email || 'N/A'})` : `Member ID: ${uid}`;
+                avatar.title = `${name} (${user.email})`;
                 container.appendChild(avatar);
             });
         } catch (err) {
