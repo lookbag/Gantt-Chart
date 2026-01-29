@@ -189,16 +189,21 @@ class GanttApp {
 
     async deleteFromSupabase(id) {
         try {
-            // 트리 구조이므로 하위 태스크나 같은 행의 세그먼트도 함께 삭제 고려
-            // Supabase에서 cascade 설정이 되어있지 않다면 수동으로 처리
+            // 1. 내가 부모라면 나를 참조하는 자식들도 다 지워야 함 (Recursive or Cascade logic)
+            // 2. 내가 Row 주인이라면 나한테 붙은 same row item들도 지워야 함
+            // Supabase API로 한 번에 처리
             const { error } = await this.supabase
                 .from('tasks')
                 .delete()
-                .or(`id.eq.${id},parentId.eq.${id},rowTaskId.eq.${id}`);
+                .or(`id.eq.${id},parentId.eq.${id},rowTaskId.eq.${id}`); // 나, 내 자식, 내 옆방 친구 모두 삭제
 
-            if (error) throw error;
+            if (error) {
+                console.error("Supabase Delete Error:", error);
+                throw error;
+            }
         } catch (err) {
             console.error('Error deleting task:', err.message);
+            alert("삭제 중 오류가 발생했습니다: " + err.message);
         }
     }
 
@@ -463,31 +468,39 @@ class GanttApp {
 
     renderGanttBars() {
         const body = document.getElementById('ganttBody');
+        // 기존 바 삭제
         const oldContent = body.querySelectorAll('.gantt-bar, .gantt-row');
         oldContent.forEach(b => b.remove());
 
         const filter = this.searchQuery.toLowerCase();
         const mainVisibleTasks = [];
 
+        // 화면에 보여질 태스크 수집
         const collectVisible = (parentId = null) => {
             this.tasks.filter(t => t.parentId === parentId && !t.rowTaskId).forEach(t => {
                 const matches = t.label.toLowerCase().includes(filter);
-                const sameRowMatches = this.tasks.some(s => s.rowTaskId === t.id && s.label.toLowerCase().includes(filter));
-                const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && (child.label.toLowerCase().includes(filter) || filter === ''));
-
-                if (filter === '' || matches || sameRowMatches || hasVisibleChild) {
+                const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && child.expanded);
+                // 필터가 없으면 무조건 보임, 있으면 매칭되는 것만
+                if (filter === '' || matches || hasVisibleChild) {
                     mainVisibleTasks.push(t);
-                    if (t.expanded || filter !== '') collectVisible(t.id);
+                    if (t.expanded) collectVisible(t.id);
                 }
             });
         };
         collectVisible();
 
+        // [중요 수정] CSS의 .tree-row 높이(36px)와 정확히 일치시켜야 함!
+        const ROW_HEIGHT = 36;
+
         mainVisibleTasks.forEach((mainTask, index) => {
+            // 1. 배경 줄 그리기 (가이드라인)
             const row = document.createElement('div');
             row.className = 'gantt-row';
+            row.style.top = `${index * ROW_HEIGHT}px`; // 위치 강제 지정
+            row.style.height = `${ROW_HEIGHT}px`;
             body.appendChild(row);
 
+            // 2. 이 줄에 포함될 모든 바(Bar) 찾기 (본인 + 같은 줄 아이템)
             const rowTasks = [mainTask, ...this.tasks.filter(t => t.rowTaskId === mainTask.id)];
 
             rowTasks.forEach(task => {
@@ -499,19 +512,19 @@ class GanttApp {
 
                 if (width <= 0) return;
 
-                // [수정] 색상 로직: 100%면 검은색, 아니면 원래 색상
-                let barColor = task.color;
-                if (parseInt(task.progress) === 100) {
-                    barColor = '#000000'; // 100% 달성 시 완전 검은색
-                }
-
                 const bar = document.createElement('div');
                 bar.className = 'gantt-bar';
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
+
+                // [중요] 40px가 아니라 36px 기준으로 중앙 정렬 (6px top margin)
+                bar.style.top = `${index * ROW_HEIGHT + 6}px`;
+                bar.dataset.id = task.id; // 삭제 시 이 ID를 참조함
+
+                // 색상 처리 (100% 검정)
+                let barColor = task.color;
+                if (parseInt(task.progress) === 100) barColor = '#000000';
                 bar.style.backgroundColor = barColor;
-                bar.style.top = `${index * 40 + 6}px`;
-                bar.dataset.id = task.id;
 
                 bar.innerHTML = `
                     <div class="resizer resizer-l"></div>
@@ -520,9 +533,19 @@ class GanttApp {
                     <div class="resizer resizer-r"></div>
                 `;
 
+                // 우클릭 이벤트 연결 (정확한 ID 전달)
+                bar.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showContextMenu(e, task.id); // 여기서 task.id를 정확히 넘겨야 삭제가 됨
+                });
+
                 body.appendChild(bar);
             });
         });
+
+        // 간트 차트 전체 높이 조정 (스크롤 동기화용)
+        body.style.height = `${mainVisibleTasks.length * ROW_HEIGHT + 50}px`;
     }
 
     updateTodayIndicator() {
@@ -1027,75 +1050,84 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Member Management Add-on ---
 
 /**
- * [Admin Only] Render User List with Wider Layout & Single Action Button
+ * [Admin Only] Render User List with Grant/Revoke Buttons
  */
 async function renderUserList() {
     const tableBody = document.getElementById('adminUserTableBody');
     if (!tableBody) return;
 
     try {
-        const [usersResult, projectsResult] = await Promise.all([
-            window.app.supabase
-                .from('profiles')
-                .select('*')
-                .order('display_name', { ascending: true }),
-            window.app.supabase
-                .from('tasks')
-                .select('project_name')
+        // 1. 유저, 프로젝트, 그리고 '이미 부여된 권한'을 모두 가져옵니다.
+        const [usersResult, projectsResult, permissionsResult] = await Promise.all([
+            window.app.supabase.from('profiles').select('*').order('display_name', { ascending: true }),
+            window.app.supabase.from('tasks').select('project_name'),
+            window.app.supabase.from('user_permissions').select('*') // 권한 목록 조회
         ]);
 
-        const users = usersResult.data;
-        const projectData = projectsResult.data;
+        const users = usersResult.data || [];
+        const projectData = projectsResult.data || [];
+        const permissions = permissionsResult.data || [];
 
         if (usersResult.error) throw usersResult.error;
-        if (projectsResult.error) throw projectsResult.error;
 
+        // 프로젝트 목록 중복 제거
         const uniqueProjects = [...new Set(projectData.map(item => item.project_name))]
-            .filter(name => name && name.trim() !== '')
-            .sort();
+            .filter(name => name && name.trim() !== '').sort();
 
-        // [English] Dropdown Options
+        // 프로젝트 선택 옵션 HTML 생성
         let projectOptions = '<option value="">Select Project</option>';
-        if (uniqueProjects.length > 0) {
-            projectOptions += uniqueProjects.map(name => `<option value="${name}">${name}</option>`).join('');
-        } else {
-            projectOptions += '<option value="" disabled>No projects available</option>';
-        }
+        uniqueProjects.forEach(name => {
+            projectOptions += `<option value="${name}">${name}</option>`;
+        });
 
-        if (!users || users.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px; color: #666;">No registered members found.</td></tr>';
+        if (users.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px;">No members found.</td></tr>';
             return;
         }
 
-        // [Design Update]
-        // 1. Single Button: "Grant Access" (Grants both Read & Write)
-        // 2. Padding: Optimized for 900px width
-        tableBody.innerHTML = users.map(user => `
+        // 테이블 렌더링
+        tableBody.innerHTML = users.map(user => {
+            // 이 유저가 가진 권한들을 찾습니다.
+            const userPerms = permissions.filter(p => p.user_id === user.id);
+
+            // 권한 목록을 배지로 표시 (삭제 버튼 포함)
+            const permBadges = userPerms.map(p => `
+                <span style="
+                    display: inline-flex; align-items: center; gap: 4px; 
+                    background: #e1f2ff; color: #0073ea; 
+                    padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 4px;">
+                    ${p.project_name}
+                    <i data-lucide="x" 
+                       style="width:12px; height:12px; cursor:pointer;" 
+                       onclick="Auth.revokePermission('${p.id}')"></i>
+                </span>
+            `).join('');
+
+            return `
             <tr style="border-bottom: 1px solid #f0f0f0;">
-                <td style="padding: 16px 24px; vertical-align: middle;">
-                    <span style="font-weight: 600; font-size: 14px; color: #333;">${user.display_name || user.full_name || 'No Name'}</span>
+                <td style="padding: 12px 24px;">
+                    <div style="font-weight: 600;">${user.display_name || user.full_name || 'No Name'}</div>
+                    <div style="font-size: 12px; color: #666;">${user.email}</div>
                 </td>
-                <td style="padding: 16px 24px; vertical-align: middle; color: #666; font-size: 13px;">
-                    ${user.email}
+                <td style="padding: 12px 24px;">
+                    ${permBadges || '<span style="color:#999; font-size:12px;">No permissions</span>'}
                 </td>
-                <td style="padding: 16px 24px; vertical-align: middle;">
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <select id="proj-${user.id}" 
-                                style="flex: 1; padding: 0 12px; border: 1px solid #e0e2e7; border-radius: 4px; height: 38px; background-color: #fff; cursor: pointer; font-size: 13px;">
+                <td style="padding: 12px 24px;">
+                    <div style="display: flex; gap: 8px;">
+                        <select id="proj-${user.id}" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                             ${projectOptions}
                         </select>
-                        
-                        <button onclick="executeGrantPermission('${user.id}')" class="grant-btn">
-                            Grant
-                        </button>
+                        <button onclick="executeGrantPermission('${user.id}')" class="grant-btn">Grant</button>
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
+
+        lucide.createIcons();
 
     } catch (err) {
         console.error('Failed to load admin data:', err.message);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:#e2445c; text-align:center; padding: 20px;">Load Failed: ${err.message}</td></tr>`;
     }
 }
 
