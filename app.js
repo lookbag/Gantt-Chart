@@ -78,12 +78,15 @@ class GanttApp {
             }
             document.getElementById('appTitle').innerText = projectName;
 
-            // Permission Check & Write State
-            this.canWrite = true; // Default for Admin
+            // Permission Check
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
-                this.canWrite = hasPermission;
-                // Note: We don't block loading here anymore. Read-only is allowed.
+                if (!hasPermission) {
+                    this.showAccessDeniedModal(projectName);
+                    this.tasks = [];
+                    this.renderAll();
+                    return;
+                }
             }
 
             // Render Members
@@ -92,7 +95,7 @@ class GanttApp {
             const { data, error } = await this.supabase
                 .from('tasks')
                 .select('*')
-                .ilike('project_name', projectName.trim())
+                .eq('project_name', projectName)
                 .order('created_at', { ascending: true });
 
             if (error) throw error;
@@ -150,11 +153,11 @@ class GanttApp {
         try {
             const projectName = document.getElementById('appTitle').innerText.trim();
 
-            // Permission Check (Refined)
+            // Permission Check
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    this.showAccessDeniedModal(projectName);
+                    alert("You do not have permission to modify data.");
                     return;
                 }
             }
@@ -248,17 +251,17 @@ class GanttApp {
 
     async fetchProjectList() {
         try {
-            // 1. Fetch ALL distinct project names from the tasks table
+            // 1. Fetch ALL distinct project names from tasks table
             const { data: taskData, error: taskError } = await this.supabase
                 .from('tasks')
                 .select('project_name');
 
             if (taskError) throw taskError;
 
-            // Generate unique project list (Case-insensitive unique)
-            const uniqueProjects = [...new Set(taskData.map(item => item.project_name.trim()))].filter(Boolean).sort();
+            // Generate unique project list
+            const uniqueProjects = [...new Set(taskData.map(item => item.project_name))].filter(Boolean).sort();
 
-            // 2. Fetch current user's approved projects (Case-insensitive match)
+            // 2. Fetch current user's approved projects
             let approvedProjects = [];
             if (Auth.user) {
                 const { data: permData } = await this.supabase
@@ -266,16 +269,16 @@ class GanttApp {
                     .select('project_name')
                     .eq('user_id', Auth.user.id)
                     .eq('is_approved', true);
-                if (permData) approvedProjects = permData.map(p => p.project_name.trim().toLowerCase());
+                if (permData) approvedProjects = permData.map(p => p.project_name);
             }
 
-            // 3. Admin bypass & Final call to populate dropdown
+            // 3. Admin sees all projects as approved
             if (Auth.isAdmin) {
-                // Admin effectively has permission for everything that exists
-                this.renderProjectDropdown(uniqueProjects, uniqueProjects.map(p => p.toLowerCase()));
-            } else {
-                this.renderProjectDropdown(uniqueProjects, approvedProjects);
+                approvedProjects = uniqueProjects;
             }
+
+            // 4. Render the list with lock state logic
+            this.renderProjectDropdown(uniqueProjects, approvedProjects);
         } catch (err) {
             console.error('Project list fetch failed:', err.message);
         }
@@ -292,8 +295,7 @@ class GanttApp {
         }
 
         projects.forEach(name => {
-            // Check approved status case-insensitively
-            const isApproved = approvedProjects.includes(name.toLowerCase());
+            const isApproved = Auth.isAdmin || approvedProjects.includes(name);
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
@@ -817,259 +819,222 @@ class GanttApp {
         }
     }
 
-    const projectName = document.getElementById('appTitle').innerText.trim();
-
-    // Permission Check
-    if(!Auth.isAdmin) {
-        const hasPermission = await this.checkPermission(Auth.user.id, projectName);
-        if (!hasPermission) {
-            this.showAccessDeniedModal(projectName);
-            return;
-        }
-    }
-
-    const newTask = {
-        label: rowTaskId ? 'Subtask' : (parentId ? 'New Subtask' : 'New Project'),
-        start: '2026-03-01',
-        end: '2026-03-15',
-        progress: 0,
-        color: '#0084d1',
-        type: 'Task',
-        expanded: true,
-        parentId: parentId,
-        rowTaskId: rowTaskId,
-        weekdays: 10,
-        state: 'none',
-        project_name: projectName,
-        user_id: Auth.user.id, // Include author ID
-        description: ''
-    };
+    async addNewTask(parentId = null, rowTaskId = null) {
+        const projectName = document.getElementById('appTitle').innerText.trim();
+        const newTask = {
+            label: rowTaskId ? 'Subtask' : (parentId ? 'New Subtask' : 'New Project'),
+            start: '2026-03-01',
+            end: '2026-03-15',
+            progress: 0,
+            color: '#0084d1',
+            type: 'Task',
+            expanded: true,
+            parentId: parentId,
+            rowTaskId: rowTaskId,
+            weekdays: 10,
+            state: 'none',
+            project_name: projectName,
+            user_id: Auth.user.id, // 작성자 아이디 포함
+            description: ''
+        };
 
         try {
-    const performInsert = async (dataToInsert) => {
-        const { data: insertData, error: insertError } = await this.supabase
-            .from('tasks')
-            .insert([dataToInsert])
-            .select();
+            const performInsert = async (dataToInsert) => {
+                const { data: insertData, error: insertError } = await this.supabase
+                    .from('tasks')
+                    .insert([dataToInsert])
+                    .select();
 
-        if (insertError && insertError.message.includes('description')) {
-            const { description, ...dataWithoutDesc } = dataToInsert;
-            return await this.supabase.from('tasks').insert([dataWithoutDesc]).select();
+                if (insertError && insertError.message.includes('description')) {
+                    const { description, ...dataWithoutDesc } = dataToInsert;
+                    return await this.supabase.from('tasks').insert([dataWithoutDesc]).select();
+                }
+                return { data: insertData, error: insertError };
+            };
+
+            let { data, error } = await performInsert(newTask);
+            if (error) throw error;
+
+            const createdTask = data[0];
+            this.tasks.push(createdTask);
+            this.renderAll();
+            this.openEditModal(createdTask.id);
+        } catch (err) {
+            console.error('Error adding task:', err.message);
+            alert('작업 추가 실패: ' + err.message);
         }
-        return { data: insertData, error: insertError };
-    };
-
-    let { data, error } = await performInsert(newTask);
-    if (error) throw error;
-
-    const createdTask = data[0];
-    this.tasks.push(createdTask);
-    this.renderAll();
-    this.openEditModal(createdTask.id);
-} catch (err) {
-    console.error('Error adding task:', err.message);
-    alert('Failed to add task: ' + err.message);
-}
     }
 
     async deleteTask(id) {
-    if (!Auth.isAdmin) {
-        alert("Permission Denied: Only administrators can delete tasks.");
-        return;
-    }
-
-    if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
-        return;
-    }
-
-    await this.deleteFromSupabase(id);
-    const sid = String(id);
-    this.tasks = this.tasks.filter(t =>
-        String(t.id) !== sid && String(t.parentId) !== sid && String(t.rowTaskId) !== sid
-    );
-    this.renderAll();
-}
-
-    async moveTask(id, dir) {
-    const projectName = document.getElementById('appTitle').innerText.trim();
-    if (!Auth.isAdmin) {
-        const hasPermission = await this.checkPermission(Auth.user.id, projectName);
-        if (!hasPermission) {
-            this.showAccessDeniedModal(projectName);
+        if (!Auth.isAdmin) {
+            alert("Permission Denied: Only administrators can delete tasks.");
             return;
         }
+
+        if (!confirm("Are you sure you want to delete this item? This action cannot be undone.")) {
+            return;
+        }
+
+        await this.deleteFromSupabase(id);
+        const sid = String(id);
+        this.tasks = this.tasks.filter(t =>
+            String(t.id) !== sid && String(t.parentId) !== sid && String(t.rowTaskId) !== sid
+        );
+        this.renderAll();
     }
 
-    const sid = String(id);
-    const index = this.tasks.findIndex(t => String(t.id) === sid);
-    if (index === -1) return;
-    const newIndex = index + dir;
-    if (newIndex < 0 || newIndex >= this.tasks.length) return;
+    async moveTask(id, dir) {
+        const sid = String(id);
+        const index = this.tasks.findIndex(t => String(t.id) === sid);
+        if (index === -1) return;
+        const newIndex = index + dir;
+        if (newIndex < 0 || newIndex >= this.tasks.length) return;
 
-    const temp = this.tasks[index];
-    this.tasks[index] = this.tasks[newIndex];
-    this.tasks[newIndex] = temp;
+        const temp = this.tasks[index];
+        this.tasks[index] = this.tasks[newIndex];
+        this.tasks[newIndex] = temp;
 
-    // In a production app, you would update a 'sort_order' column here.
-    // For now, we update in-memory only for visual feedback.
-    this.renderAll();
-}
+        // 순서 변경의 경우 'sort_order' 같은 컬럼을 두고 업데이트하는 것이 정석이나,
+        // 여기서는 전체 tasks 배열의 created_at 등을 조정하거나 별도 로직이 필요함.
+        // 현재는 메모리 상에서만 이동 후 renderAll 호출
+        this.renderAll();
+    }
 
-openEditModal(taskId) {
-    const task = this.tasks.find(t => String(t.id) === String(taskId));
-    if (!task) return;
+    openEditModal(taskId) {
+        const task = this.tasks.find(t => String(t.id) === String(taskId));
+        if (!task) return;
 
-    this.editingTaskId = taskId;
-    document.getElementById('editTaskLabel').value = task.label;
-    document.getElementById('editTaskStart').value = task.start;
-    document.getElementById('editTaskEnd').value = task.end;
-    document.getElementById('editTaskWeekdays').value = task.weekdays;
-    document.getElementById('editTaskProgress').value = task.progress;
-    document.getElementById('progressValue').innerText = `${task.progress}%`;
-    document.getElementById('editTaskType').value = task.type;
-    document.getElementById('editTaskState').value = task.state;
-    document.getElementById('editTaskDescription').value = task.description || '';
+        this.editingTaskId = taskId;
+        document.getElementById('editTaskLabel').value = task.label;
+        document.getElementById('editTaskStart').value = task.start;
+        document.getElementById('editTaskEnd').value = task.end;
+        document.getElementById('editTaskWeekdays').value = task.weekdays;
+        document.getElementById('editTaskProgress').value = task.progress;
+        document.getElementById('progressValue').innerText = `${task.progress}%`;
+        document.getElementById('editTaskType').value = task.type;
+        document.getElementById('editTaskState').value = task.state;
+        document.getElementById('editTaskDescription').value = task.description || '';
 
-    // [New] 컬러 팔레트 생성 함수 호출
-    generateColorPalette(task.color);
+        // [New] 컬러 팔레트 생성 함수 호출
+        generateColorPalette(task.color);
 
-    // [Permission Check] Hide editing actions if read-only
-    const footerButtons = ['saveTask', 'deleteTask'];
-    footerButtons.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-            btn.style.display = this.canWrite ? 'block' : 'none';
-        }
-    });
+        document.getElementById('editModal').classList.remove('hidden');
+    }
 
-    document.getElementById('editModal').classList.remove('hidden');
-}
-
-closeEditModal() {
-    document.getElementById('editModal').classList.add('hidden');
-    this.editingTaskId = null;
-}
+    closeEditModal() {
+        document.getElementById('editModal').classList.add('hidden');
+        this.editingTaskId = null;
+    }
 
     async saveTask() {
-    if (!this.editingTaskId) return;
-    const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
+        if (!this.editingTaskId) return;
+        const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
 
-    task.label = document.getElementById('editTaskLabel').value;
-    task.start = document.getElementById('editTaskStart').value;
-    task.end = document.getElementById('editTaskEnd').value;
-    task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
-    task.progress = parseInt(document.getElementById('editTaskProgress').value);
-    task.type = document.getElementById('editTaskType').value;
-    task.state = document.getElementById('editTaskState').value;
-    task.description = document.getElementById('editTaskDescription').value;
+        task.label = document.getElementById('editTaskLabel').value;
+        task.start = document.getElementById('editTaskStart').value;
+        task.end = document.getElementById('editTaskEnd').value;
+        task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
+        task.progress = parseInt(document.getElementById('editTaskProgress').value);
+        task.type = document.getElementById('editTaskType').value;
+        task.state = document.getElementById('editTaskState').value;
+        task.description = document.getElementById('editTaskDescription').value;
 
-    // [New] 선택된 컬러 값을 가져와서 저장
-    const selectedColor = document.getElementById('editTaskColorValue').value;
-    if (selectedColor) {
-        task.color = selectedColor;
+        // [New] 선택된 컬러 값을 가져와서 저장
+        const selectedColor = document.getElementById('editTaskColorValue').value;
+        if (selectedColor) {
+            task.color = selectedColor;
+        }
+
+        await this.syncTask(task);
+        this.renderAll();
+        this.closeEditModal();
     }
 
-    await this.syncTask(task);
-    this.renderAll();
-    this.closeEditModal();
-}
+    // --- Access Denied & Request Logic ---
 
-// --- Access Denied & Request Logic ---
+    showAccessDeniedModal(projectName) {
+        const modal = document.getElementById('accessDeniedModal');
+        if (!modal) return;
 
-showAccessDeniedModal(projectName) {
-    const modal = document.getElementById('accessDeniedModal');
-    if (!modal) return;
-
-    this.deniedProject = projectName;
-    document.getElementById('accessDeniedMessage').innerHTML =
-        `You do not have permission to view the <strong>${projectName}</strong> project.<br>Would you like to request access from the administrator?`;
-    modal.classList.remove('hidden');
-}
+        this.deniedProject = projectName;
+        document.getElementById('accessDeniedMessage').innerHTML =
+            `You do not have permission to view the <strong>${projectName}</strong> project.<br>Would you like to request access from the administrator?`;
+        modal.classList.remove('hidden');
+    }
 
     async requestAccess() {
-    if (!this.deniedProject || !Auth.user) return;
+        if (!this.deniedProject || !Auth.user) return;
 
-    const projectName = this.deniedProject;
-    try {
-        const { error } = await this.supabase
-            .from('user_permissions')
-            .upsert({
-                user_id: Auth.user.id,
-                project_name: projectName,
-                is_approved: false
-            }, { onConflict: 'user_id, project_name' });
+        const projectName = this.deniedProject;
+        try {
+            const { error } = await this.supabase
+                .from('user_permissions')
+                .upsert({
+                    user_id: Auth.user.id,
+                    project_name: projectName,
+                    is_approved: false
+                }, { onConflict: 'user_id, project_name' });
 
-        if (error) throw error;
+            if (error) throw error;
 
-        // Trigger mailto
-        const subject = encodeURIComponent(`Requesting Access for ${projectName}`);
-        const body = encodeURIComponent(`User ${Auth.user.email} is requesting access to project [${projectName}].\nPlease approve in the admin panel.`);
-        window.location.href = `mailto:csyoon@kbautosys.com?subject=${subject}&body=${body}`;
+            // Trigger mailto
+            const subject = encodeURIComponent(`Requesting Access for ${projectName}`);
+            const body = encodeURIComponent(`User ${Auth.user.email} is requesting access to project [${projectName}].\nPlease approve in the admin panel.`);
+            window.location.href = `mailto:csyoon@kbautosys.com?subject=${subject}&body=${body}`;
 
-        alert('Access request has been sent to the administrator.');
-        document.getElementById('accessDeniedModal').classList.add('hidden');
-    } catch (err) {
-        console.error('Request Access Error:', err.message);
-        alert('Failed to send request: ' + err.message);
+            alert('Access request has been sent to the administrator.');
+            document.getElementById('accessDeniedModal').classList.add('hidden');
+        } catch (err) {
+            console.error('Request Access Error:', err.message);
+            alert('Failed to send request: ' + err.message);
+        }
     }
-}
 
     // --- Project Members UI ---
 
     async renderProjectMembers(projectName) {
-    const trimmedName = projectName ? projectName.trim() : "";
-    const container = document.getElementById('projectMembers');
-    if (!container) return;
-    container.innerHTML = '';
+        const trimmedName = projectName ? projectName.trim() : "";
+        const container = document.getElementById('projectMembers');
+        if (!container) return;
+        container.innerHTML = '';
 
-    try {
-        // 1. Get approved user IDs for this project (Case-insensitive)
-        const { data: perms, error: permError } = await this.supabase
-            .from('user_permissions')
-            .select('user_id')
-            .ilike('project_name', trimmedName)
-            .eq('is_approved', true);
+        try {
+            // 1. Get approved user IDs for this project (Case-insensitive)
+            const { data: perms, error: permError } = await this.supabase
+                .from('user_permissions')
+                .select('user_id')
+                .ilike('project_name', trimmedName)
+                .eq('is_approved', true);
 
-        if (permError) throw permError;
-        if (!perms || perms.length === 0) return;
+            if (permError) throw permError;
+            if (!perms || perms.length === 0) return;
 
-        const userIds = perms.map(p => p.user_id);
+            const userIds = perms.map(p => p.user_id);
 
-        // 2. Get profile names for these IDs
-        const { data: profiles, error: profError } = await this.supabase
-            .from('profiles')
-            .select('id, display_name, full_name, email')
-            .in('id', userIds);
+            // 2. Get profile names for these IDs
+            const { data: profiles, error: profError } = await this.supabase
+                .from('profiles')
+                .select('id, display_name, full_name, email')
+                .in('id', userIds);
 
-        if (profError) throw profError;
+            if (profError) throw profError;
 
-        // 3. Render Avatars with fallback for missing profiles
-        userIds.forEach(uid => {
-            const profile = profiles ? profiles.find(p => p.id === uid) : null;
-            let name = "User";
-            let initials = "US";
+            // 3. Render Avatars with fallback for missing profiles
+            userIds.forEach(uid => {
+                const profile = profiles ? profiles.find(p => p.id === uid) : null;
+                const name = profile ? (profile.display_name || profile.full_name || profile.email) : `User`;
+                const initial = name.charAt(0).toUpperCase();
 
-            if (profile) {
-                name = profile.display_name || profile.full_name || profile.email || "User";
-                if (profile.display_name || profile.full_name) {
-                    initials = (profile.display_name || profile.full_name).charAt(0).toUpperCase();
-                } else if (profile.email) {
-                    initials = profile.email.substring(0, 2).toUpperCase();
-                } else {
-                    initials = name.charAt(0).toUpperCase();
-                }
-            }
-
-            const avatar = document.createElement('div');
-            avatar.className = 'member-avatar';
-            avatar.innerText = initials;
-            avatar.title = profile ? `${name} (${profile.email || 'No email'})` : `Member ID: ${uid}`;
-            container.appendChild(avatar);
-        });
-    } catch (err) {
-        console.error('Error rendering members:', err.message);
+                const avatar = document.createElement('div');
+                avatar.className = 'member-avatar';
+                avatar.innerText = initial;
+                avatar.title = profile ? `${name} (${profile.email || 'N/A'})` : `Member ID: ${uid}`;
+                container.appendChild(avatar);
+            });
+        } catch (err) {
+            console.error('Error rendering members:', err.message);
+        }
     }
-}
 }
 
 document.addEventListener('DOMContentLoaded', () => {
