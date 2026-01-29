@@ -124,17 +124,25 @@ class GanttApp {
     }
 
     async checkPermission(userId, projectName) {
+        const trimmedName = projectName ? projectName.trim() : "";
         try {
             const { data, error } = await this.supabase
                 .from('user_permissions')
                 .select('*')
                 .eq('user_id', userId)
-                .eq('project_name', projectName)
+                .ilike('project_name', trimmedName)
                 .eq('is_approved', true)
-                .single();
+                .maybeSingle();
+
+            if (!data) {
+                console.warn(`[Permission Denied] User: ${userId}, Project: ${trimmedName}`);
+            } else {
+                console.log(`[Permission Granted] User: ${userId}, Project: ${trimmedName}`);
+            }
 
             return !!data;
         } catch (err) {
+            console.error('[Permission Check Error]', err);
             return false;
         }
     }
@@ -985,16 +993,17 @@ class GanttApp {
     // --- Project Members UI ---
 
     async renderProjectMembers(projectName) {
+        const trimmedName = projectName ? projectName.trim() : "";
         const container = document.getElementById('projectMembers');
         if (!container) return;
         container.innerHTML = '';
 
         try {
-            // 1. Get approved user IDs for this project
+            // 1. Get approved user IDs for this project (Case-insensitive)
             const { data: perms, error: permError } = await this.supabase
                 .from('user_permissions')
                 .select('user_id')
-                .eq('project_name', projectName)
+                .ilike('project_name', trimmedName)
                 .eq('is_approved', true);
 
             if (permError) throw permError;
