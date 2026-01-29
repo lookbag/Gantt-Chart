@@ -19,14 +19,14 @@ const CACHE_EXPIRY_MS = 5 * 60 * 1000;
 
 class GanttApp {
     constructor() {
-        // Check if CONFIG is defined
-        if (typeof CONFIG === 'undefined') {
-            console.error('config.js file not found.');
-            return;
+        // [수정] window.sbClient를 우선 사용합니다.
+        if (window.sbClient) {
+            this.supabase = window.sbClient;
+        } else {
+            // 비상용 (실행될 일 없음)
+            if (typeof CONFIG === 'undefined') return;
+            this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
         }
-
-        // Initialize Supabase Client
-        this.supabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
         this.tasks = [];
         this.activeProject = localStorage.getItem('lastProject') || null;

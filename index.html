@@ -321,22 +321,23 @@
             </div>
         </div>
         <script>
-            // 1. 에러 발생 시 화면에 알림창 띄우기 (디버깅용)
-            window.onerror = function (message, source, lineno, colno, error) {
-                alert('Critical Error: ' + message + '\nLine: ' + lineno);
-            };
-            window.onunhandledrejection = function (event) {
-                alert('Unhandled Promise Error: ' + event.reason);
-            };
-            // 2. 설정값을 window 객체에 직접 할당 (범위 문제 해결)
+            // 1. 설정값 정의
             window.CONFIG = {
                 SUPABASE_URL: 'https://qhhuehqibsltiegsnrxm.supabase.co',
                 SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaHVlaHFpYnNsdGllZ3NucnhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NDMwMjksImV4cCI6MjA4NTExOTAyOX0.ND9mzAtyz67msS-KuBfL2RURZ97VGffMsOjsUTqydWU'
             };
-            // 호환성을 위해 const로도 선언 
-            const CONFIG = window.CONFIG;
         </script>
+
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+        <script>
+            // 3. [핵심] 여기서 딱 한 번만 연결을 생성해서 전역 변수(window.sbClient)에 담습니다.
+            if (typeof supabase !== 'undefined') {
+                window.sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+                console.log("✅ Global Supabase Client Initialized");
+            }
+        </script>
+
         <script src="auth.js"></script>
         <script src="app.js"></script>
 </body>

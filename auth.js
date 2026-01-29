@@ -1,98 +1,129 @@
-/**
- * Authentication and Permission Logic for KB Autosys Gantt
- */
-const authSuppabase = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+// [수정] 새로 만들지 않고 index.html에서 만든 것을 가져옵니다.
+const authSuppabase = window.sbClient;
+
+if (!authSuppabase) {
+    console.error("Critical: Supabase client missing");
+    alert("System Error: Please refresh the page.");
+}
 
 const Auth = {
     isLoggedIn: false,
     isAdmin: false,
     user: null,
-    mode: 'login', // 'login' or 'register'
-    authSubscription: null,
+    mode: 'login',
 
     async init() {
+        console.log("Auth init started...");
         this.bindEvents();
 
-        // Clear existing subscription if any
-        if (this.authSubscription) {
-            this.authSubscription.unsubscribe();
-        }
+        // 안전장치: 네트워크 문제로 멈추는 것을 방지
+        try {
+            // 세션 상태 감지
+            authSuppabase.auth.onAuthStateChange(async (event, session) => {
+                console.log("Auth Event:", event);
+                if (event === 'SIGNED_IN' && session) {
+                    await this.handleAuthStateChange(session.user);
+                } else if (event === 'SIGNED_OUT') {
+                    window.location.reload();
+                } else if (event === 'PASSWORD_RECOVERY') {
+                    this.showResetForm();
+                }
+            });
 
-        // Detect Supabase auth state changes
-        const { data: { subscription } } = authSuppabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'PASSWORD_RECOVERY') {
-                this.showResetForm();
-            } else if (event === 'SIGNED_IN' && session) {
-                await this.handleAuthStateChange(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                this.isLoggedIn = false;
-                this.user = null;
-                this.isAdmin = false;
+            // 현재 세션 확인
+            const { data, error } = await authSuppabase.auth.getSession();
+
+            if (error) throw error;
+
+            if (data.session) {
+                console.log("User found:", data.session.user.email);
+                await this.handleAuthStateChange(data.session.user);
+            } else {
+                console.log("No user session. Showing login.");
+                this.showAuthModal();
             }
-        });
 
-        this.authSubscription = subscription;
-
-        const { data: { session } } = await authSuppabase.auth.getSession();
-        if (session && !window.location.hash.includes('type=recovery')) {
-            await this.handleAuthStateChange(session.user);
-        } else if (!session) {
+        } catch (err) {
+            console.error("Auth Init Error:", err);
+            // 에러가 나도 로그아웃은 가능하게 처리
             this.showAuthModal();
         }
     },
 
     bindEvents() {
-        document.getElementById('toggleAuthMode').onclick = () => this.toggleMode();
-        document.getElementById('authSubmit').onclick = () => this.mode === 'login' ? this.login() : this.register();
-        document.getElementById('otpSubmit').onclick = () => this.verifyOtp();
-        document.getElementById('logoutBtn').onclick = () => this.logout();
-        document.getElementById('adminMenuBtn').onclick = () => this.showAdminModal();
-        document.getElementById('closeAdmin').onclick = () => document.getElementById('adminModal').classList.add('hidden');
-        document.getElementById('approveBtn').onclick = () => this.approveUser();
+        const bind = (id, fn) => {
+            const el = document.getElementById(id);
+            if (el) el.onclick = fn;
+        };
 
-        // OTP helpers
-        if (document.getElementById('resendOtp')) {
-            document.getElementById('resendOtp').onclick = () => this.resendOtp();
-        }
-        if (document.getElementById('cancelOtp')) {
-            document.getElementById('cancelOtp').onclick = () => this.showLoginForm();
-        }
+        bind('toggleAuthMode', () => this.toggleMode());
+        bind('authSubmit', () => this.mode === 'login' ? this.login() : this.register());
+        bind('otpSubmit', () => this.verifyOtp());
 
-        // Password Reset Events
-        document.getElementById('openForgotPass').onclick = () => this.showForgotForm();
-        document.getElementById('backToLogin').onclick = () => this.showLoginForm();
-        document.getElementById('forgotSubmit').onclick = () => this.sendResetEmail();
-        document.getElementById('resetSubmit').onclick = () => this.updatePassword();
+        // [핵심] 강력한 로그아웃: 에러가 나도 무조건 초기화
+        bind('logoutBtn', async () => {
+            try {
+                await authSuppabase.auth.signOut();
+            } catch (e) {
+                console.warn("SignOut api failed, forcing clear:", e);
+            }
+            // 강제 청소 및 새로고침
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.reload();
+        });
+
+        bind('adminMenuBtn', () => this.showAdminModal());
+        bind('closeAdmin', () => document.getElementById('adminModal').classList.add('hidden'));
+        bind('approveBtn', () => this.approveUser());
+
+        // Password Reset
+        bind('openForgotPass', () => this.showForgotForm());
+        bind('backToLogin', () => this.showLoginForm());
+        bind('forgotSubmit', () => this.sendResetEmail());
+        bind('resetSubmit', () => this.updatePassword());
+
+        if (document.getElementById('resendOtp')) bind('resendOtp', () => this.resendOtp());
+        if (document.getElementById('cancelOtp')) bind('cancelOtp', () => this.showLoginForm());
     },
 
-
+    // --- UI Helpers ---
 
     showAuthModal() {
-        document.getElementById('authModal').classList.remove('hidden');
-        this.showLoginForm();
+        const modal = document.getElementById('authModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.showLoginForm();
+        }
     },
 
     showLoginForm() {
-        document.getElementById('loginForm').classList.remove('hidden');
-        document.getElementById('forgotPassForm').classList.add('hidden');
-        document.getElementById('otpSection').classList.add('hidden');
-        document.getElementById('resetPassForm').classList.add('hidden');
-        document.getElementById('authSubtitle').innerText = 'Please log in with your company email';
+        this.safeRemove('loginForm', 'hidden');
+        this.safeAdd('forgotPassForm', 'hidden');
+        this.safeAdd('otpSection', 'hidden');
+        this.safeAdd('resetPassForm', 'hidden');
+        const sub = document.getElementById('authSubtitle');
+        if (sub) sub.innerText = 'Please log in with your company email';
     },
 
     showForgotForm() {
-        document.getElementById('loginForm').classList.add('hidden');
-        document.getElementById('forgotPassForm').classList.remove('hidden');
-        document.getElementById('authSubtitle').innerText = 'Reset Password';
+        this.safeAdd('loginForm', 'hidden');
+        this.safeRemove('forgotPassForm', 'hidden');
+        const sub = document.getElementById('authSubtitle');
+        if (sub) sub.innerText = 'Reset Password';
     },
 
     showResetForm() {
-        document.getElementById('authModal').classList.remove('hidden');
-        document.getElementById('loginForm').classList.add('hidden');
-        document.getElementById('forgotPassForm').classList.add('hidden');
-        document.getElementById('resetPassForm').classList.remove('hidden');
-        document.getElementById('authSubtitle').innerText = 'Set New Password';
+        this.safeRemove('authModal', 'hidden');
+        this.safeAdd('loginForm', 'hidden');
+        this.safeAdd('forgotPassForm', 'hidden');
+        this.safeRemove('resetPassForm', 'hidden');
+        const sub = document.getElementById('authSubtitle');
+        if (sub) sub.innerText = 'Set New Password';
     },
+
+    safeAdd(id, cls) { const el = document.getElementById(id); if (el) el.classList.add(cls); },
+    safeRemove(id, cls) { const el = document.getElementById(id); if (el) el.classList.remove(cls); },
 
     toggleMode() {
         this.mode = this.mode === 'login' ? 'register' : 'login';
@@ -102,15 +133,15 @@ const Auth = {
         const authSubtitle = document.getElementById('authSubtitle');
 
         if (this.mode === 'register') {
-            registerFields.classList.remove('hidden');
-            authSubmit.innerText = 'Sign Up & Get Code';
-            toggleAuthMode.innerText = 'Log In';
-            authSubtitle.innerText = 'Create your account with company email';
+            registerFields?.classList.remove('hidden');
+            if (authSubmit) authSubmit.innerText = 'Sign Up & Get Code';
+            if (toggleAuthMode) toggleAuthMode.innerText = 'Log In';
+            if (authSubtitle) authSubtitle.innerText = 'Create your account with company email';
         } else {
-            registerFields.classList.add('hidden');
-            authSubmit.innerText = 'Login';
-            toggleAuthMode.innerText = 'Sign Up';
-            authSubtitle.innerText = 'Please log in with your company email';
+            registerFields?.classList.add('hidden');
+            if (authSubmit) authSubmit.innerText = 'Login';
+            if (toggleAuthMode) toggleAuthMode.innerText = 'Sign Up';
+            if (authSubtitle) authSubtitle.innerText = 'Please log in with your company email';
         }
     },
 
@@ -142,9 +173,10 @@ const Auth = {
             if (error) throw error;
 
             // Show OTP section
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('otpSection').classList.remove('hidden');
-            document.getElementById('authSubtitle').innerText = 'Check Your Email';
+            this.safeAdd('loginForm', 'hidden');
+            this.safeRemove('otpSection', 'hidden');
+            const sub = document.getElementById('authSubtitle');
+            if (sub) sub.innerText = 'Check Your Email';
         } catch (err) {
             alert("Sign up failed: " + err.message);
         }
@@ -191,13 +223,8 @@ const Auth = {
         const password = document.getElementById('authPassword').value;
 
         try {
-            const { data, error } = await authSuppabase.auth.signInWithPassword({
-                email,
-                password
-            });
-
+            const { data, error } = await authSuppabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            this.handleAuthStateChange(data.user);
         } catch (err) {
             alert("Login failed: " + err.message);
         }
@@ -245,16 +272,9 @@ const Auth = {
 
     async checkAdminStatus(email) {
         try {
-            const { data, error } = await authSuppabase
-                .from('admin_users')
-                .select('email')
-                .eq('email', email)
-                .maybeSingle();
-
-            if (error) throw error;
+            const { data } = await authSuppabase.from('admin_users').select('email').eq('email', email).maybeSingle();
             return !!data;
         } catch (err) {
-            console.error('Admin Check Error:', err);
             return false;
         }
     },
@@ -276,42 +296,42 @@ const Auth = {
     async handleAuthStateChange(user) {
         this.user = user;
         this.isLoggedIn = true;
-        this.isAdmin = await this.checkAdminStatus(user.email);
 
-        // Only close modal if not in recovery mode
+        try {
+            this.isAdmin = await this.checkAdminStatus(user.email);
+        } catch (e) {
+            console.warn("Admin check failed", e);
+            this.isAdmin = false;
+        }
+
         if (!window.location.hash.includes('type=recovery')) {
-            document.getElementById('authModal').classList.add('hidden');
-        }
-        document.getElementById('userAvatar').innerText = user.user_metadata.full_name?.charAt(0) || user.email.charAt(0).toUpperCase();
-        document.getElementById('userAvatar').title = `${user.user_metadata.full_name || 'User'} (${user.email})`;
-
-        if (this.isAdmin) {
-            document.getElementById('adminMenuBtn').style.display = 'flex';
-        } else {
-            document.getElementById('adminMenuBtn').style.display = 'none';
+            document.getElementById('authModal')?.classList.add('hidden');
         }
 
-        // Initialize App after auth
-        if (window.app) {
+        const avatar = document.getElementById('userAvatar');
+        if (avatar) {
+            const initial = user.user_metadata.full_name?.charAt(0) || user.email.charAt(0).toUpperCase();
+            avatar.innerText = initial;
+            avatar.title = `${user.user_metadata.full_name || 'User'} (${user.email})`;
+        }
+
+        const adminBtn = document.getElementById('adminMenuBtn');
+        if (adminBtn) adminBtn.style.display = this.isAdmin ? 'flex' : 'none';
+
+        if (window.app && typeof window.app.loadTasks === 'function') {
             window.app.loadTasks();
         }
     },
 
-    async logout() {
-        await authSuppabase.auth.signOut();
-        window.location.reload();
-    },
-
     async showAdminModal() {
         document.getElementById('adminModal').classList.remove('hidden');
-        if (typeof renderUserList === 'function') {
-            renderUserList();
-        }
+        this.loadPermissionList();
     },
 
     async loadPermissionList() {
-        const list = document.getElementById('userPermissionList');
-        list.innerHTML = '<p style="padding:16px; text-align:center;">Loading...</p>';
+        const tbody = document.getElementById('adminUserTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Loading...</td></tr>';
 
         try {
             const { data, error } = await authSuppabase
@@ -320,24 +340,24 @@ const Auth = {
 
             if (error) throw error;
 
-            list.innerHTML = '';
+            tbody.innerHTML = '';
             if (data.length === 0) {
-                list.innerHTML = '<p style="padding:16px; text-align:center; color:#999;">No permissions granted yet.</p>';
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">No permissions granted yet.</td></tr>';
+                return;
             }
 
             data.forEach(perm => {
-                const item = document.createElement('div');
-                item.className = 'permission-item';
-                item.innerHTML = `
-                    <div>
-                        <div style="font-weight:600; font-size:14px;">User ID: ${perm.user_id.substring(0, 8)}...</div>
-                        <div style="color:#666; font-size:12px;">Project: ${perm.project_name}</div>
-                    </div>
-                    <button class="project-delete-btn" onclick="Auth.revokePermission('${perm.id}')">
-                        <i data-lucide="trash-2"></i>
-                    </button>
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 12px 24px;">User: ${perm.user_id.substring(0, 8)}...</td>
+                    <td style="padding: 12px 24px;">Project: ${perm.project_name}</td>
+                    <td style="padding: 12px 24px;">
+                        <button class="project-delete-btn" onclick="Auth.revokePermission('${perm.id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </td>
                 `;
-                list.appendChild(item);
+                tbody.appendChild(tr);
             });
             lucide.createIcons();
         } catch (err) {
