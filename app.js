@@ -76,27 +76,17 @@ class GanttApp {
             }
             document.getElementById('appTitle').innerText = projectName;
 
-            // [추가됨] 프로젝트 멤버 아이콘 불러오기!
-            this.loadProjectMembers(projectName);
-
             // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
                 if (!hasPermission) {
-                    // [수정됨] 단순 경고창 대신 -> 확인 누르면 이메일 발송
-                    if (confirm(`'${projectName}' 프로젝트에 접근 권한이 없습니다.\n관리자(csyoon)에게 접근 권한 요청 메일을 보내시겠습니까?`)) {
-                        const subject = `[Gantt] 권한 요청: ${projectName}`;
-                        const body = `안녕하세요,\n\n다음 프로젝트에 대한 접근 권한을 요청합니다.\n\n- 프로젝트명: ${projectName}\n- 요청자: ${Auth.user.email}\n\n확인 부탁드립니다.`;
-                        window.location.href = `mailto:csyoon@kbautosys.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                    }
-
+                    alert(`You do not have access to the '${projectName}' project. Please request approval from the administrator.`);
                     this.tasks = [];
                     this.renderAll();
                     return;
                 }
             }
 
-            // (이하 기존 로직 동일)
             const { data, error } = await this.supabase
                 .from('tasks')
                 .select('*')
