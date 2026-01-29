@@ -101,7 +101,7 @@ class GanttApp {
                 .from('tasks')
                 .select('*')
                 .eq('project_name', projectName)
-                .order('created_at', { ascending: true });
+                .order('sort_order', { ascending: true }); // <-- 여기를 'created_at'에서 'sort_order'로 변경
 
             if (error) throw error;
 
@@ -857,38 +857,49 @@ class GanttApp {
     }
 
     // 2. 이동 로직 업그레이드 (DB 저장 기능 추가)
+    // [수정] 순서 이동 기능 (트리 구조 및 간트 차트 동기화 문제 해결)
     async moveTask(id, dir) {
-        const sid = String(id);
-        const index = this.tasks.findIndex(t => String(t.id) === sid);
-        if (index === -1) return;
+        // 1. 현재 이동하려는 태스크 찾기
+        const task = this.tasks.find(t => String(t.id) === String(id));
+        if (!task) return;
 
-        const newIndex = index + dir;
-        if (newIndex < 0 || newIndex >= this.tasks.length) return;
+        // 2. 나와 같은 레벨의 형제들(Siblings)만 모아서 현재 순서대로 정렬
+        // (부모가 같고, rowTaskId가 같은 항목들)
+        const siblings = this.tasks
+            .filter(t => t.parentId === task.parentId && t.rowTaskId === task.rowTaskId)
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-        // (1) 배열에서 순서 바꾸기 (즉각 반응)
-        const temp = this.tasks[index];
-        this.tasks[index] = this.tasks[newIndex];
-        this.tasks[newIndex] = temp;
+        // 3. 형제 리스트 안에서 나의 현재 위치(Index) 찾기
+        const currentIndex = siblings.findIndex(t => String(t.id) === String(id));
+        if (currentIndex === -1) return;
 
-        // (2) sort_order 값 교환 (DB 저장용)
-        const taskA = this.tasks[index];
-        const taskB = this.tasks[newIndex];
+        // 4. 이동할 목표 위치 계산
+        const targetIndex = currentIndex + dir;
+        if (targetIndex < 0 || targetIndex >= siblings.length) return; // 더 이상 이동 불가
 
-        // 만약 sort_order가 없으면 임시로 인덱스 사용
-        const orderA = taskA.sort_order || index;
-        const orderB = taskB.sort_order || newIndex;
+        // 5. 맞바꿀 대상 태스크 가져오기
+        const targetTask = siblings[targetIndex];
 
-        // 서로 값을 맞바꿈
-        taskA.sort_order = orderB;
-        taskB.sort_order = orderA;
+        // 6. 서로의 sort_order 값 교환
+        // (값이 없으면 현재 인덱스를 기준으로 임시 값 생성)
+        const orderA = task.sort_order !== null ? task.sort_order : currentIndex;
+        const orderB = targetTask.sort_order !== null ? targetTask.sort_order : targetIndex;
 
-        this.renderAll(); // 화면 즉시 갱신
+        task.sort_order = orderB;
+        targetTask.sort_order = orderA;
 
-        // (3) Supabase에 변경된 순서 저장 (백그라운드)
+        // 7. [핵심] 전체 배열을 sort_order 기준으로 재정렬
+        // 이 과정이 있어야 왼쪽 트리와 오른쪽 간트 차트가 똑같은 순서로 그려집니다.
+        this.tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+        // 8. 화면 즉시 갱신 (이제 줄이 딱 맞을 겁니다)
+        this.renderAll();
+
+        // 9. 변경된 순서를 DB에 저장 (백그라운드 처리)
         try {
             await this.supabase.from('tasks').upsert([
-                { id: taskA.id, sort_order: taskA.sort_order },
-                { id: taskB.id, sort_order: taskB.sort_order }
+                { id: task.id, sort_order: task.sort_order },
+                { id: targetTask.id, sort_order: targetTask.sort_order }
             ]);
         } catch (e) {
             console.error("순서 저장 실패:", e);
