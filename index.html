@@ -322,17 +322,10 @@
 
         </div>
         <script>
-            // 1. 에러 발생 시 화면에 알림창 띄우기 (디버깅용)
-            window.onerror = function (message, source, lineno, colno, error) {
-                alert('Critical Error: ' + message + '\nLine: ' + lineno);
-            };
-            // 2. 설정값을 window 객체에 직접 할당 (범위 문제 해결)
-            window.CONFIG = {
+            const CONFIG = {
                 SUPABASE_URL: 'https://qhhuehqibsltiegsnrxm.supabase.co',
                 SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaHVlaHFpYnNsdGllZ3NucnhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NDMwMjksImV4cCI6MjA4NTExOTAyOX0.ND9mzAtyz67msS-KuBfL2RURZ97VGffMsOjsUTqydWU'
             };
-            // 호환성을 위해 const로도 선언 
-            const CONFIG = window.CONFIG;
         </script>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
         <script src="auth.js"></script>
