@@ -1068,53 +1068,40 @@ class GanttApp {
         this.renderAll();
     }
 
-    // 2. 이동 로직 업그레이드 (DB 저장 기능 추가)
-    // [수정] 순서 이동 기능 (트리 구조 및 간트 차트 동기화 문제 해결)
+    /**
+     * 1. 순서 이동 로직: 같은 부모 내에서 한 칸씩만 이동
+     */
     async moveTask(id, dir) {
-        // 1. 현재 이동하려는 태스크 찾기
         const task = this.tasks.find(t => String(t.id) === String(id));
         if (!task) return;
 
-        // 2. 나와 같은 레벨의 형제들(Siblings)만 모아서 현재 순서대로 정렬
-        // (부모가 같고, rowTaskId가 같은 항목들)
+        // 같은 부모와 같은 Row 관계에 있는 형제들만 추출 및 정렬
         const siblings = this.tasks
             .filter(t => t.parentId === task.parentId && t.rowTaskId === task.rowTaskId)
             .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-        // 3. 형제 리스트 안에서 나의 현재 위치(Index) 찾기
         const currentIndex = siblings.findIndex(t => String(t.id) === String(id));
-        if (currentIndex === -1) return;
-
-        // 4. 이동할 목표 위치 계산
         const targetIndex = currentIndex + dir;
-        if (targetIndex < 0 || targetIndex >= siblings.length) return; // 더 이상 이동 불가
 
-        // 5. 맞바꿀 대상 태스크 가져오기
+        if (targetIndex < 0 || targetIndex >= siblings.length) return; // 범위를 벗어나면 중단
+
         const targetTask = siblings[targetIndex];
 
-        // 6. 서로의 sort_order 값 교환
-        // (값이 없으면 현재 인덱스를 기준으로 임시 값 생성)
-        const orderA = task.sort_order !== null ? task.sort_order : currentIndex;
-        const orderB = targetTask.sort_order !== null ? targetTask.sort_order : targetIndex;
+        // 서로의 sort_order 교환
+        const tempOrder = task.sort_order || currentIndex;
+        task.sort_order = targetTask.sort_order || targetIndex;
+        targetTask.sort_order = tempOrder;
 
-        task.sort_order = orderB;
-        targetTask.sort_order = orderA;
-
-        // 7. [핵심] 전체 배열을 sort_order 기준으로 재정렬
-        // 이 과정이 있어야 왼쪽 트리와 오른쪽 간트 차트가 똑같은 순서로 그려집니다.
-        this.tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-        // 8. 화면 즉시 갱신 (이제 줄이 딱 맞을 겁니다)
-        this.renderAll();
-
-        // 9. 변경된 순서를 DB에 저장 (백그라운드 처리)
+        // DB 업데이트 및 화면 갱신
         try {
             await this.supabase.from('tasks').upsert([
                 { id: task.id, sort_order: task.sort_order },
                 { id: targetTask.id, sort_order: targetTask.sort_order }
             ]);
+            this.tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+            this.renderAll();
         } catch (e) {
-            console.error("순서 저장 실패:", e);
+            console.error("이동 저장 실패:", e);
         }
     }
 
@@ -1220,80 +1207,74 @@ class GanttApp {
         } catch (e) { console.error("멤버 아이콘 로드 실패", e); }
     }
 
-    // [신규 기능] 복사
+    /**
+     * 2 & 4. 하위 항목 포함 복사 (Recursive Copy)
+     */
     copyTask(taskId) {
-        const task = this.tasks.find(t => t.id === taskId);
-        if (!task) return;
+        const rootTask = this.tasks.find(t => String(t.id) === String(taskId));
+        if (!rootTask) return;
 
         const tasksToCopy = [];
-        const findDescendants = (parentId) => {
-            const children = this.tasks.filter(t => t.parentId === parentId);
+
+        // 재귀적으로 모든 하위 항목을 찾는 함수
+        const collectDescendants = (parentId) => {
+            const children = this.tasks.filter(t => String(t.parentId) === String(parentId));
             children.forEach(child => {
                 tasksToCopy.push(child);
-                findDescendants(child.id);
+                collectDescendants(child.id); // 자식의 자식까지 탐색
             });
         };
 
-        tasksToCopy.push(task);
-        findDescendants(taskId);
+        tasksToCopy.push(rootTask);
+        collectDescendants(taskId);
 
+        // 클립보드에 저장 (Deep Copy)
         this.clipboard = JSON.parse(JSON.stringify(tasksToCopy));
-        alert(`${tasksToCopy.length}개 항목이 복사되었습니다.`);
+
+        alert(`${tasksToCopy.length}개 항목(하위 포함)이 복사되었습니다.`);
+
+        // 붙여넣기 버튼 활성화
+        const pasteBtn = document.querySelector('[data-action="paste"]');
+        if (pasteBtn) pasteBtn.classList.remove('disabled');
     }
 
-    // [신규 기능] 붙여넣기
-    async pasteTask(targetParentId) {
-        if (!this.clipboard || this.clipboard.length === 0) {
-            alert("클립보드가 비어있습니다.");
-            return;
-        }
+    /**
+     * 4. 붙여넣기 로직 (구조 유지하며 새로운 ID로 삽입)
+     */
+    async pasteTask(targetParentId = null) {
+        if (!this.clipboard || this.clipboard.length === 0) return;
 
-        const projectName = document.getElementById('appTitle').innerText.trim();
-        const idMap = {};
-        const newTasks = this.clipboard.map(t => ({ ...t, oldId: t.id }));
+        const idMap = {}; // 기존 ID와 새로 생성된 ID 매핑용
+        const projectName = this.activeProject;
 
         try {
-            const rootItem = newTasks[0];
-            const rootInsertData = {
-                ...rootItem,
-                id: undefined, oldId: undefined,
-                parentId: targetParentId,
-                project_name: projectName,
-                user_id: Auth.user.id,
-                label: rootItem.label + " (Copy)"
-            };
+            for (const [index, item] of this.clipboard.entries()) {
+                const isRoot = index === 0;
 
-            const { data: rootData, error: rootError } = await this.supabase.from('tasks').insert([rootInsertData]).select();
-            if (rootError) throw rootError;
-
-            const newRootId = rootData[0].id;
-            idMap[rootItem.oldId] = newRootId;
-
-            const descendants = newTasks.slice(1);
-            for (const item of descendants) {
-                const newParentId = idMap[item.parentId];
-                if (!newParentId) continue;
-
+                // 신규 생성을 위한 데이터 가공 (ID 제거)
+                const { id, created_at, ...pureData } = item;
                 const insertData = {
-                    ...item,
-                    id: undefined, oldId: undefined,
-                    parentId: newParentId,
+                    ...pureData,
                     project_name: projectName,
-                    user_id: Auth.user.id
+                    user_id: Auth.user.id,
+                    label: isRoot ? `${pureData.label} (Copy)` : pureData.label,
+                    // 루트면 선택한 곳 아래로, 아니면 매핑된 새 부모 ID 아래로
+                    parentId: isRoot ? targetParentId : idMap[item.parentId],
+                    sort_order: (this.tasks.length + index) // 겹치지 않게 뒤로 배치
                 };
 
                 const { data, error } = await this.supabase.from('tasks').insert([insertData]).select();
-                if (!error && data) {
-                    idMap[item.oldId] = data[0].id;
-                }
+                if (error) throw error;
+
+                // 기존 ID를 키로 하여 새로 생성된 ID를 저장 (자식 태스크들이 참조할 수 있도록)
+                idMap[item.id] = data[0].id;
             }
 
-            await this.loadTasks();
-            alert("붙여넣기 완료");
-
+            await this.loadTasks(); // 전체 다시 로드
+            alert("성공적으로 모든 항목을 붙여넣었습니다.");
         } catch (err) {
-            console.error("Paste error:", err);
-            alert("붙여넣기 실패");
+            console.error("붙여넣기 실패:", err);
+            alert("붙여넣기 중 오류가 발생했습니다.");
         }
     }
 
