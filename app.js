@@ -606,12 +606,17 @@ class GanttApp {
 
     renderGanttBars() {
         const body = document.getElementById('ganttBody');
-        body.innerHTML = ''; // 초기화
+        body.innerHTML = ''; // 초기화 (여기서 기존 today-indicator가 사라짐)
+
+        // [핵심 수정] 초기화 직후 '오늘 날짜 선'을 다시 만들어줍니다.
+        // 이것이 없으면 updateTodayIndicator()가 실패하여 OK 버튼 오류가 발생합니다.
+        const todayIndicator = document.createElement('div');
+        todayIndicator.className = 'today-indicator';
+        body.appendChild(todayIndicator);
 
         const filter = this.searchQuery.toLowerCase();
         const mainVisibleTasks = [];
 
-        // 트리 리스트와 똑같은 순서로 태스크 수집
         const collectVisible = (parentId = null) => {
             this.tasks.filter(t => t.parentId === parentId && !t.rowTaskId).forEach(t => {
                 const matches = t.label.toLowerCase().includes(filter);
@@ -624,24 +629,20 @@ class GanttApp {
         };
         collectVisible();
 
-        const ROW_HEIGHT = 40; // CSS와 동일하게 40px 고정
+        const ROW_HEIGHT = 40;
 
         mainVisibleTasks.forEach((mainTask) => {
-            // 1. 줄 생성
             const row = document.createElement('div');
             row.className = 'gantt-row';
             row.style.height = `${ROW_HEIGHT}px`;
 
-            // [수정] 메인 프로젝트 행이면 배경색 파랗게 (트리와 통일)
             if (mainTask.parentId === null) {
                 row.classList.add('project-row-bg');
             }
             body.appendChild(row);
 
-            // [핵심 해결] 메인 프로젝트(최상위)는 바를 그리지 않고 여기서 종료 (return)
             if (mainTask.parentId === null) return;
 
-            // 2. 바(Bar) 그리기 (Main Task가 아닐 때만)
             const rowTasks = [mainTask, ...this.tasks.filter(t => t.rowTaskId === mainTask.id)];
 
             rowTasks.forEach(task => {
@@ -656,7 +657,7 @@ class GanttApp {
                 bar.className = 'gantt-bar';
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
-                bar.style.top = '8px'; // 40px 높이 중앙 정렬
+                bar.style.top = '8px';
                 bar.dataset.id = task.id;
 
                 let barColor = task.color;
@@ -670,13 +671,11 @@ class GanttApp {
                     <div class="resizer resizer-r"></div>
                 `;
 
-                // 이벤트 연결
                 bar.addEventListener('contextmenu', (e) => {
                     e.preventDefault(); e.stopPropagation();
                     this.showContextMenu(e, task.id);
                 });
 
-                // 줄 안에 바 넣기
                 row.appendChild(bar);
             });
         });
@@ -852,7 +851,7 @@ class GanttApp {
                 return;
             }
 
-            // 수정: more-btn 클릭 감지 강화
+            // [3점 메뉴 클릭 유지]
             const moreBtn = e.target.closest('.more-btn');
             if (moreBtn) {
                 e.stopPropagation();
@@ -885,8 +884,11 @@ class GanttApp {
             if (!e.target.closest('#contextMenu') && !e.target.closest('.more-btn')) this.hideContextMenu();
         });
 
-        document.getElementById('cancelEdit').onclick = () => this.closeEditModal();
-        document.getElementById('saveTask').onclick = () => this.saveTask();
+        // [수정: 버튼 연결]
+        document.getElementById('cancelEdit').onclick = () => this.closeEditModal(); // 상단 X
+        document.getElementById('cancelEditBtn').onclick = () => this.closeEditModal(); // 하단 취소 (추가됨)
+        document.getElementById('saveTask').onclick = () => this.saveTask(); // OK 버튼
+
         document.getElementById('deleteTask').onclick = () => {
             this.deleteTask(this.editingTaskId);
             this.closeEditModal();
@@ -912,22 +914,13 @@ class GanttApp {
             document.getElementById('progressValue').innerText = `${e.target.value}%`;
         };
 
-        // [추가] 스크롤 동기화 함수 실행
         this.bindScrollSync();
 
-        // [추가] 로그 추가 버튼 이벤트 연결
         const addLogBtn = document.getElementById('addLogBtn');
-        if (addLogBtn) {
-            addLogBtn.onclick = () => this.addLogEntry();
-        }
+        if (addLogBtn) addLogBtn.onclick = () => this.addLogEntry();
 
-        // [추가] 엔터키로도 입력 가능하게
         const newLogText = document.getElementById('newLogText');
-        if (newLogText) {
-            newLogText.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') this.addLogEntry();
-            });
-        }
+        if (newLogText) newLogText.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.addLogEntry(); });
     }
 
     shiftView(type, days) {
