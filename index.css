@@ -412,11 +412,10 @@ body {
 /* [중요 수정] 오른쪽 간트 차트 배경 줄 스타일 */
 .gantt-row {
     height: var(--row-height) !important;
-    /* 40px 강제 적용 */
     border-bottom: 1px solid var(--border-color) !important;
-    /* 가로줄 표시 */
     box-sizing: border-box;
-    position: relative;
+    position: relative !important;
+    /* [중요] 이게 있어야 막대가 이 안에서 자리를 잡습니다 */
     width: 100%;
 }
 
@@ -431,7 +430,8 @@ body {
 
 /* [중요 수정] 막대 위치 조정 */
 .gantt-bar {
-    position: absolute;
+    position: absolute !important;
+    /* 부모(.gantt-row) 기준으로 둥둥 떠있음 */
     /* 40px 높이 중앙 정렬: (40 - 24) / 2 = 8px */
     top: 8px !important;
     /* Centered in 40px row for 24px bar */

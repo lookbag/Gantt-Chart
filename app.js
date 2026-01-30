@@ -468,8 +468,8 @@ class GanttApp {
 
     renderGanttBars() {
         const body = document.getElementById('ganttBody');
-        const oldContent = body.querySelectorAll('.gantt-bar, .gantt-row');
-        oldContent.forEach(b => b.remove());
+        // 기존 내용 깨끗이 비우기
+        body.innerHTML = '';
 
         const filter = this.searchQuery.toLowerCase();
         const mainVisibleTasks = [];
@@ -489,25 +489,24 @@ class GanttApp {
         };
         collectVisible();
 
-        // [핵심 수정] CSS와 동일하게 40px로 설정
-        const ROW_HEIGHT = 40;
+        const ROW_HEIGHT = 40; // 높이 40px 고정
 
-        mainVisibleTasks.forEach((mainTask, index) => {
-            // 1. 배경 줄 그리기 (가이드라인)
+        mainVisibleTasks.forEach((mainTask) => {
+            // 1. 각 줄(Row)을 먼저 만듭니다.
             const row = document.createElement('div');
             row.className = 'gantt-row';
-            // CSS에서 height를 40px로 잡았으므로 여기서도 맞춰줍니다.
             row.style.height = `${ROW_HEIGHT}px`;
-            row.style.top = `${index * ROW_HEIGHT}px`; // 절대 위치 잡기 (필요 시)
 
+            // [핵심] 이 줄(Row)을 바디에 붙입니다.
             body.appendChild(row);
 
-            // 2. 이 줄에 포함될 바(Bar) 그리기
+            // 2. 이 줄에 들어가야 할 막대들을 찾습니다.
             const rowTasks = [mainTask, ...this.tasks.filter(t => t.rowTaskId === mainTask.id)];
 
             rowTasks.forEach(task => {
                 const start = new Date(task.start);
                 const end = new Date(task.end);
+
                 const left = (start - this.viewStart) / (1000 * 60 * 60 * 24) * this.pxPerDay;
                 const width = (end - start) / (1000 * 60 * 60 * 24) * this.pxPerDay;
 
@@ -518,13 +517,13 @@ class GanttApp {
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
 
-                // [중요] 40px 높이 내에서 중앙 정렬 (Top margin 8px)
-                // index * 40 + 8
-                bar.style.top = `${index * ROW_HEIGHT + 8}px`;
+                // [수정] 복잡한 계산 없이, 그냥 그 줄 안에서 위쪽 8px만 띄웁니다.
+                // (Row가 relative, Bar가 absolute이므로 Row 기준으로 배치됨)
+                bar.style.top = '8px';
 
                 bar.dataset.id = task.id;
 
-                // 색상 처리 (100% 검정)
+                // 색상 처리
                 let barColor = task.color;
                 if (parseInt(task.progress) === 100) barColor = '#000000';
                 bar.style.backgroundColor = barColor;
@@ -536,19 +535,22 @@ class GanttApp {
                     <div class="resizer resizer-r"></div>
                 `;
 
-                // 우클릭 이벤트
+                // 이벤트 연결
                 bar.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     this.showContextMenu(e, task.id);
                 });
 
-                body.appendChild(bar);
+                // [핵심 해결책] 막대를 '전체 화면'이 아니라 '현재 줄(row)' 안에 집어넣습니다.
+                row.appendChild(bar);
             });
         });
 
-        // 전체 높이 조정
+        // 전체 높이 지정 (스크롤바 용)
         body.style.height = `${mainVisibleTasks.length * ROW_HEIGHT + 50}px`;
+
+        // 오늘 날짜 선 업데이트
+        this.updateTodayIndicator();
     }
 
     updateTodayIndicator() {
