@@ -920,23 +920,29 @@ class GanttApp {
         document.getElementById('contextMenu').classList.add('hidden');
     }
 
-    // [수정] 스크롤 동기화 (오른쪽이 Master, 왼쪽이 Slave)
+    // [수정] 스크롤 동기화 (Body to Body 매칭)
     bindScrollSync() {
-        const tree = document.getElementById('treeGrid');
-        const gantt = document.querySelector('.gantt-panel');
+        const tree = document.getElementById('treeGrid');       // 왼쪽 몸통
+        const ganttBody = document.getElementById('ganttBody'); // 오른쪽 몸통 (Main Scroller)
+        const ganttHeader = document.getElementById('ganttHeader'); // 오른쪽 헤더
 
-        if (!tree || !gantt) return;
+        if (!tree || !ganttBody || !ganttHeader) return;
 
-        // 1. 오른쪽(간트) 스크롤 -> 왼쪽(트리) 이동
-        gantt.addEventListener('scroll', () => {
-            tree.scrollTop = gantt.scrollTop;
+        // 1. [Main] 오른쪽 몸통(Body)을 스크롤할 때
+        ganttBody.addEventListener('scroll', () => {
+            // 세로 스크롤 -> 왼쪽 리스트 동기화
+            tree.scrollTop = ganttBody.scrollTop;
+
+            // 가로 스크롤 -> 오른쪽 헤더 동기화 (날짜가 같이 옆으로 이동)
+            ganttHeader.scrollLeft = ganttBody.scrollLeft;
         });
 
-        // 2. 왼쪽(트리) 휠 -> 오른쪽(간트) 이동
+        // 2. 왼쪽 리스트에서 휠을 굴릴 때 -> 오른쪽 몸통을 움직임
         tree.addEventListener('wheel', (e) => {
             if (e.deltaY !== 0) {
-                e.preventDefault(); // 왼쪽 자체 스크롤 막음
-                gantt.scrollTop += e.deltaY; // 오른쪽을 대신 움직임 -> 위 1번 이벤트 발동 -> 왼쪽 따라옴
+                e.preventDefault();
+                // 오른쪽 몸통을 스크롤하면 -> 위 1번 이벤트가 발생해서 왼쪽도 따라감
+                ganttBody.scrollTop += e.deltaY;
             }
         }, { passive: false });
     }

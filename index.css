@@ -486,11 +486,14 @@ body {
 }
 
 /* --- Gantt Panel --- */
+/* 1. 오른쪽 패널 컨테이너 (스크롤 금지, 틀만 잡음) */
 .gantt-panel {
     flex: 1;
-    overflow: auto !important;
+    overflow: hidden !important;
+    /* [변경] 전체 스크롤 막음 */
     display: flex;
     flex-direction: column;
+    position: relative;
     background-color: var(--bg-white);
     border-left: 1px solid var(--border-color);
 }
@@ -505,16 +508,20 @@ body {
     background-color: #fff;
 }
 
+/* 2. 오른쪽 헤더 (고정됨, 가로 스크롤만 JS로 제어) */
 .gantt-header {
+    /* sticky 제거 -> 그냥 상단에 고정 */
     height: calc(var(--header-top-height) + var(--header-bottom-height)) !important;
     display: flex;
     flex-direction: column;
-    position: sticky;
-    top: 0;
-    z-index: 50;
     background-color: #fff;
     border-bottom: 1px solid var(--border-color);
     box-sizing: border-box;
+    overflow: hidden !important;
+    /* [변경] 스크롤바 숨김 */
+    flex-shrink: 0;
+    /* 찌그러짐 방지 */
+    width: 100%;
 }
 
 /* 상단 월(Month) 행 */
@@ -558,10 +565,13 @@ body {
 
 
 
-/* Gantt Body */
+/* 3. 오른쪽 몸통 (여기가 진짜 스크롤 영역) */
 .gantt-body {
+    flex: 1;
+    /* 남은 공간 다 차지 */
+    overflow: auto !important;
+    /* [핵심] 상하좌우 스크롤은 여기서 발생 */
     position: relative;
-    min-height: 100%;
     background-color: var(--bg-white);
     /* [핵심] CSS로 세로줄 그리기 (이미지 없이 성능 최적화) */
     /* 210px은 7일 * 30px(pxPerDay)을 가정한 값. JS에서 동적으로 맞추겠지만 기본값 설정 */
