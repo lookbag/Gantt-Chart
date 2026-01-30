@@ -700,234 +700,99 @@ class GanttApp {
     // --- Interaction ---
 
     bindEvents() {
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            this.searchQuery = e.target.value;
-            this.renderAll();
-        });
+        // 1. 검색창 이벤트
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.searchQuery = e.target.value;
+                this.renderAll();
+            });
+        }
 
-        document.getElementById('zoomIn').onclick = () => {
-            this.pxPerDay = Math.min(100, this.pxPerDay + 5);
-            this.renderAll();
-        };
-        document.getElementById('zoomOut').onclick = () => {
-            this.pxPerDay = Math.max(5, this.pxPerDay - 5);
-            this.renderAll();
-        };
+        // 2. 줌 & 날짜 이동 버튼
+        const setClick = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
 
-        document.getElementById('prevStart').onclick = () => this.shiftView('start', -7);
-        document.getElementById('nextStart').onclick = () => this.shiftView('start', 7);
-        document.getElementById('prevEnd').onclick = () => this.shiftView('end', -7);
-        document.getElementById('nextEnd').onclick = () => this.shiftView('end', 7);
+        setClick('zoomIn', () => { this.pxPerDay = Math.min(100, this.pxPerDay + 5); this.renderAll(); });
+        setClick('zoomOut', () => { this.pxPerDay = Math.max(5, this.pxPerDay - 5); this.renderAll(); });
+        setClick('prevStart', () => this.shiftView('start', -7));
+        setClick('nextStart', () => this.shiftView('start', 7));
+        setClick('prevEnd', () => this.shiftView('end', -7));
+        setClick('nextEnd', () => this.shiftView('end', 7));
 
-        document.getElementById('globalAddTask').onclick = () => this.addNewTask(null);
-        document.getElementById('headerNewProjectBtn').onclick = () => this.createNewProject();
+        setClick('globalAddTask', () => this.addNewTask(null));
+        setClick('headerNewProjectBtn', () => this.createNewProject());
 
-        // 프로젝트 목록 드롭다운 관련
+        // 3. 프로젝트 드롭다운
         const projectBtn = document.getElementById('showProjectList');
         const projectDropdown = document.getElementById('projectDropdown');
-        const appTitle = document.getElementById('appTitle');
-
-        const toggleDropdown = (e) => {
-            e.stopPropagation();
-            const isHidden = projectDropdown.classList.contains('hidden');
-            if (isHidden) {
-                projectDropdown.classList.remove('hidden');
-                this.fetchProjectList();
-            } else {
-                projectDropdown.classList.add('hidden');
-            }
-        };
-
-        projectBtn.onclick = toggleDropdown;
-
-        // 제목 클릭 시에도 드롭다운 (편집 중이 아닐 때)
-        appTitle.onclick = (e) => {
-            if (document.activeElement !== appTitle) {
-                toggleDropdown(e);
-            }
-        };
-
-        // 제목 편집 가능하게 유지
-        appTitle.addEventListener('blur', () => {
-            const newName = document.getElementById('appTitle').innerText.trim();
-            if (this.activeProject !== newName && newName !== '') {
-                this.switchProject(newName);
-            }
-        });
-
-        // 엔터 키를 눌렀을 때도 저장 및 로드
-        document.getElementById('appTitle').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                e.target.blur();
-            }
-        });
-
-        // 외부(전역) 클릭 시 닫기
-        window.addEventListener('click', (e) => {
-            if (document.getElementById('projectDropdown')) {
-                document.getElementById('projectDropdown').classList.add('hidden');
-            }
-            if (!document.getElementById('contextMenu').contains(e.target)) {
-                this.hideContextMenu();
-            }
-        });
-
-        // Drag & Resize logic
-        let isInteracting = false;
-        let interactionType = null;
-        let targetTaskId = null;
-        let startX = 0;
-        let initialLeft = 0;
-        let initialWidth = 0;
-
-        document.getElementById('ganttBody').addEventListener('mousedown', (e) => {
-            const resizer = e.target.closest('.resizer');
-            const bar = e.target.closest('.gantt-bar');
-            if (!bar) return;
-
-            isInteracting = true;
-            targetTaskId = bar.dataset.id;
-            startX = e.clientX;
-            initialLeft = parseFloat(bar.style.left);
-            initialWidth = parseFloat(bar.style.width);
-
-            interactionType = resizer ? (resizer.classList.contains('resizer-l') ? 'resize-l' : 'resize-r') : 'drag';
-            e.preventDefault();
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isInteracting) return;
-            const deltaX = e.clientX - startX;
-            const bar = document.querySelector(`.gantt-bar[data-id="${targetTaskId}"]`);
-            if (!bar) return;
-
-            if (interactionType === 'drag') {
-                bar.style.left = `${initialLeft + deltaX}px`;
-            } else if (interactionType === 'resize-l') {
-                const newLeft = initialLeft + deltaX;
-                const newWidth = initialWidth - deltaX;
-                if (newWidth > 10) { bar.style.left = `${newLeft}px`; bar.style.width = `${newWidth}px`; }
-            } else if (interactionType === 'resize-r') {
-                const newWidth = initialWidth + deltaX;
-                if (newWidth > 10) bar.style.width = `${newWidth}px`;
-            }
-        });
-
-        window.addEventListener('mouseup', async () => {
-            if (!isInteracting) return;
-            const bar = document.querySelector(`.gantt-bar[data-id="${targetTaskId}"]`);
-            const task = this.tasks.find(t => t.id === targetTaskId);
-
-            if (bar && task) {
-                const left = parseFloat(bar.style.left);
-                const width = parseFloat(bar.style.width);
-                const startMs = this.viewStart.getTime() + (left / this.pxPerDay) * (1000 * 60 * 60 * 24);
-                const endMs = startMs + (width / this.pxPerDay) * (1000 * 60 * 60 * 24);
-
-                task.start = new Date(startMs).toISOString().split('T')[0];
-                task.end = new Date(endMs).toISOString().split('T')[0];
-                task.weekdays = this.calculateWeekdays(task.start, task.end);
-
-                await this.syncTask(task); // Supabase 동기화
-            }
-
-            isInteracting = false;
-            targetTaskId = null;
-            this.renderAll();
-        });
-
-        document.getElementById('treeGrid').addEventListener('click', (e) => {
-            const row = e.target.closest('.tree-row');
-            if (!row) return;
-            const id = row.dataset.id;
-            const task = this.tasks.find(t => String(t.id) === String(id));
-
-            if (e.target.closest('.tree-expander')) {
-                if (task) {
-                    task.expanded = !task.expanded;
-                    this.renderAll();
-                    this.syncTask(task);
-                }
-                return;
-            }
-
-            // 수정: more-btn 클릭 감지 강화
-            const moreBtn = e.target.closest('.more-btn');
-            if (moreBtn) {
+        if (projectBtn && projectDropdown) {
+            projectBtn.onclick = (e) => {
                 e.stopPropagation();
-                this.showContextMenu(e, id);
-                return;
-            }
+                projectDropdown.classList.toggle('hidden');
+                if (!projectDropdown.classList.contains('hidden')) this.fetchProjectList();
+            };
+        }
 
-            document.querySelectorAll('.tree-row').forEach(r => r.classList.remove('selected'));
-            row.classList.add('selected');
+        // --- [수정된 부분] 모달 버튼 (상단 X, 하단 Cancel, OK) 안전하게 연결 ---
+        setClick('cancelEdit', () => this.closeEditModal());      // 상단 X 버튼
+        setClick('cancelEditBtn', () => this.closeEditModal());   // 하단 Cancel 버튼 (이게 빠져있었음)
+        setClick('saveTask', () => this.saveTask());              // OK 버튼
+        setClick('deleteTask', () => { this.deleteTask(this.editingTaskId); this.closeEditModal(); });
+
+        // 4. 로그 추가 버튼
+        setClick('addLogBtn', () => this.addLogEntry());
+        const newLogText = document.getElementById('newLogText');
+        if (newLogText) newLogText.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.addLogEntry(); });
+
+        // 5. 컨텍스트 메뉴
+        const ctxMenu = document.getElementById('contextMenu');
+        if (ctxMenu) {
+            ctxMenu.addEventListener('click', (e) => {
+                const action = e.target.closest('li')?.dataset.action;
+                if (!action || e.target.closest('li').classList.contains('disabled')) return;
+                const taskId = ctxMenu.dataset.taskId;
+                this.handleMenuAction(action, taskId);
+                this.hideContextMenu();
+            });
+        }
+
+        // 6. 전역 클릭 (팝업 닫기)
+        window.addEventListener('click', (e) => {
+            if (projectDropdown) projectDropdown.classList.add('hidden');
+            if (ctxMenu && !ctxMenu.contains(e.target)) this.hideContextMenu();
         });
 
-        document.getElementById('treeGrid').addEventListener('dblclick', (e) => {
+        // 7. 입력 필드 자동 계산 로직
+        const startInput = document.getElementById('editTaskStart');
+        const weekdayInput = document.getElementById('editTaskWeekdays');
+        const endInput = document.getElementById('editTaskEnd');
+        if (startInput && weekdayInput && endInput) {
+            startInput.onchange = () => { if (weekdayInput.value) endInput.value = this.calculateEndDate(startInput.value, parseInt(weekdayInput.value)); };
+            weekdayInput.oninput = () => { if (startInput.value) endInput.value = this.calculateEndDate(startInput.value, parseInt(weekdayInput.value)); };
+            endInput.onchange = () => { if (startInput.value) weekdayInput.value = this.calculateWeekdays(startInput.value, endInput.value); };
+        }
+
+        const progInput = document.getElementById('editTaskProgress');
+        if (progInput) progInput.oninput = (e) => {
+            const valSpan = document.getElementById('progressValue');
+            if (valSpan) valSpan.innerText = `${e.target.value}%`;
+        };
+
+        // 8. 더블 클릭 이벤트
+        const treeGrid = document.getElementById('treeGrid');
+        if (treeGrid) treeGrid.addEventListener('dblclick', (e) => {
             const row = e.target.closest('.tree-row');
             if (row) this.openEditModal(row.dataset.id);
         });
-        document.getElementById('ganttBody').addEventListener('dblclick', (e) => {
+
+        const ganttBody = document.getElementById('ganttBody');
+        if (ganttBody) ganttBody.addEventListener('dblclick', (e) => {
             const bar = e.target.closest('.gantt-bar');
             if (bar) this.openEditModal(bar.dataset.id);
         });
 
-        document.getElementById('contextMenu').addEventListener('click', (e) => {
-            const action = e.target.closest('li')?.dataset.action;
-            if (!action || e.target.closest('li').classList.contains('disabled')) return;
-            const taskId = document.getElementById('contextMenu').dataset.taskId;
-            this.handleMenuAction(action, taskId);
-            this.hideContextMenu();
-        });
-
-        window.addEventListener('click', (e) => {
-            if (!e.target.closest('#contextMenu') && !e.target.closest('.more-btn')) this.hideContextMenu();
-        });
-
-        document.getElementById('cancelEdit').onclick = () => this.closeEditModal();
-        document.getElementById('saveTask').onclick = () => this.saveTask();
-        document.getElementById('deleteTask').onclick = () => {
-            this.deleteTask(this.editingTaskId);
-            this.closeEditModal();
-        };
-
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn, .tab-panel').forEach(el => el.classList.remove('active'));
-                btn.classList.add('active');
-                document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-            });
-        });
-
-        const startInput = document.getElementById('editTaskStart');
-        const weekdayInput = document.getElementById('editTaskWeekdays');
-        const endInput = document.getElementById('editTaskEnd');
-
-        startInput.onchange = () => { if (weekdayInput.value) endInput.value = this.calculateEndDate(startInput.value, parseInt(weekdayInput.value)); };
-        weekdayInput.oninput = () => { if (startInput.value) endInput.value = this.calculateEndDate(startInput.value, parseInt(weekdayInput.value)); };
-        endInput.onchange = () => { if (startInput.value) weekdayInput.value = this.calculateWeekdays(startInput.value, endInput.value); };
-
-        document.getElementById('editTaskProgress').oninput = (e) => {
-            document.getElementById('progressValue').innerText = `${e.target.value}%`;
-        };
-
-        // [추가] 스크롤 동기화 함수 실행
+        // 9. 스크롤 동기화
         this.bindScrollSync();
-
-        // [추가] 로그 추가 버튼 이벤트 연결
-        const addLogBtn = document.getElementById('addLogBtn');
-        if (addLogBtn) {
-            addLogBtn.onclick = () => this.addLogEntry();
-        }
-
-        // [추가] 엔터키로도 입력 가능하게
-        const newLogText = document.getElementById('newLogText');
-        if (newLogText) {
-            newLogText.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') this.addLogEntry();
-            });
-        }
     }
 
     shiftView(type, days) {
@@ -1144,7 +1009,6 @@ class GanttApp {
         this.editingTaskId = null;
     }
 
-    // [안전 패치] 모달이 안 닫히는 문제 해결
     async saveTask() {
         if (!this.editingTaskId) return;
 
@@ -1152,24 +1016,42 @@ class GanttApp {
             const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
             if (!task) throw new Error("Task not found");
 
-            task.label = document.getElementById('editTaskLabel').value;
-            task.start = document.getElementById('editTaskStart').value;
-            task.end = document.getElementById('editTaskEnd').value;
-            task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
-            task.progress = parseInt(document.getElementById('editTaskProgress').value);
-            task.type = document.getElementById('editTaskType').value;
-            task.state = document.getElementById('editTaskState').value;
-            task.description = document.getElementById('editTaskDescription').value;
+            // [안전 장치] 요소를 찾아서 값을 가져오되, 없으면 무시하거나 기존값 사용
+            const getVal = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.value : null;
+            };
 
-            const selectedColor = document.getElementById('editTaskColorValue').value;
+            const label = getVal('editTaskLabel'); if (label !== null) task.label = label;
+            const start = getVal('editTaskStart'); if (start !== null) task.start = start;
+            const end = getVal('editTaskEnd'); if (end !== null) task.end = end;
+
+            const weekdays = getVal('editTaskWeekdays');
+            if (weekdays !== null) task.weekdays = parseInt(weekdays) || 0;
+
+            const progress = getVal('editTaskProgress');
+            if (progress !== null) task.progress = parseInt(progress) || 0;
+
+            const type = getVal('editTaskType'); if (type !== null) task.type = type;
+            const state = getVal('editTaskState'); if (state !== null) task.state = state;
+
+            // Description (Log 기능과 호환)
+            const desc = getVal('editTaskDescription');
+            if (desc !== null) task.description = desc;
+
+            const selectedColor = getVal('editTaskColorValue');
             if (selectedColor) task.color = selectedColor;
 
+            // 저장 실행
             await this.syncTask(task);
             this.renderAll();
+
+            // [중요] 에러가 없어야 여기까지 와서 창이 닫힘
             this.closeEditModal();
+
         } catch (e) {
             console.error("Save failed:", e);
-            alert("저장 중 오류가 발생했습니다.");
+            alert("저장 중 오류가 발생했습니다: " + e.message);
         }
     }
 
