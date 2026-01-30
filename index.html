@@ -176,9 +176,20 @@
                         </div>
                     </div>
                     <div class="form-group description-group">
-                        <label>Description</label>
-                        <textarea id="editTaskDescription" placeholder="Enter task details here..."
-                            class="modal-textarea"></textarea>
+                        <label>Progress Log</label>
+
+                        <div class="log-container">
+                            <div id="logHistory" class="log-history"></div>
+
+                            <div class="log-input-row">
+                                <input type="date" id="newLogDate" class="log-date-input">
+                                <input type="text" id="newLogText" class="log-text-input"
+                                    placeholder="Update progress comment...">
+                                <button id="addLogBtn" class="log-add-btn"><i data-lucide="send"></i></button>
+                            </div>
+                        </div>
+
+                        <textarea id="editTaskDescription" class="hidden"></textarea>
                     </div>
                 </div>
 

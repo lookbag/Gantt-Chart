@@ -914,6 +914,20 @@ class GanttApp {
 
         // [추가] 스크롤 동기화 함수 실행
         this.bindScrollSync();
+
+        // [추가] 로그 추가 버튼 이벤트 연결
+        const addLogBtn = document.getElementById('addLogBtn');
+        if (addLogBtn) {
+            addLogBtn.onclick = () => this.addLogEntry();
+        }
+
+        // [추가] 엔터키로도 입력 가능하게
+        const newLogText = document.getElementById('newLogText');
+        if (newLogText) {
+            newLogText.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.addLogEntry();
+            });
+        }
     }
 
     shiftView(type, days) {
@@ -1114,11 +1128,14 @@ class GanttApp {
         document.getElementById('progressValue').innerText = `${task.progress}%`;
         document.getElementById('editTaskType').value = task.type;
         document.getElementById('editTaskState').value = task.state;
-        document.getElementById('editTaskDescription').value = task.description || '';
 
-        // [New] 컬러 팔레트 생성 함수 호출
+        // [수정] 렌더러 호출 (기존 textarea 단순 할당 대체)
+        this.renderDescriptionLog(task.description || '');
+
+        // [추가] 새 로그 입력창 날짜를 오늘로 기본 설정
+        document.getElementById('newLogDate').value = new Date().toISOString().split('T')[0];
+
         generateColorPalette(task.color);
-
         document.getElementById('editModal').classList.remove('hidden');
     }
 
@@ -1275,6 +1292,79 @@ class GanttApp {
             console.error("Paste error:", err);
             alert("붙여넣기 실패");
         }
+    }
+
+    // --- [Add-on] Description Log Logic ---
+
+    renderDescriptionLog(jsonString) {
+        const historyContainer = document.getElementById('logHistory');
+        const hiddenInput = document.getElementById('editTaskDescription');
+        if (!historyContainer || !hiddenInput) return;
+
+        this.currentLogData = [];
+
+        // 1. 기존 데이터 파싱
+        try {
+            if (jsonString && jsonString.trim().startsWith('[')) {
+                this.currentLogData = JSON.parse(jsonString);
+            } else if (jsonString && jsonString.trim() !== '') {
+                this.currentLogData.push({
+                    date: new Date().toISOString().split('T')[0],
+                    text: jsonString,
+                    user: 'Legacy Note'
+                });
+            }
+        } catch (e) {
+            console.warn("Log parse error, creating new.", e);
+            this.currentLogData = [];
+        }
+
+        // 2. 화면에 그리기
+        historyContainer.innerHTML = '';
+
+        if (this.currentLogData.length === 0) {
+            historyContainer.innerHTML = '<div style="text-align:center; color:#ccc; padding:20px;">No updates yet.</div>';
+        } else {
+            this.currentLogData.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'log-item';
+                div.innerHTML = `
+                    <div class="log-meta">
+                        <span>${item.date}</span>
+                        <span>${item.user || ''}</span>
+                    </div>
+                    <div class="log-content">${item.text}</div>
+                `;
+                historyContainer.appendChild(div);
+            });
+            historyContainer.scrollTop = historyContainer.scrollHeight;
+        }
+
+        // 3. 숨겨진 textarea에 JSON 문자열로 최신화
+        hiddenInput.value = JSON.stringify(this.currentLogData);
+    }
+
+    addLogEntry() {
+        const dateInput = document.getElementById('newLogDate');
+        const textInput = document.getElementById('newLogText');
+        const hiddenInput = document.getElementById('editTaskDescription');
+
+        if (!dateInput.value || !textInput.value.trim()) {
+            alert("날짜와 내용을 입력해주세요.");
+            return;
+        }
+
+        const userName = Auth.user?.user_metadata?.full_name || Auth.user?.email.split('@')[0] || 'User';
+
+        const newEntry = {
+            date: dateInput.value,
+            text: textInput.value.trim(),
+            user: userName
+        };
+
+        this.currentLogData.push(newEntry);
+        this.renderDescriptionLog(JSON.stringify(this.currentLogData));
+        textInput.value = '';
     }
 }
 
