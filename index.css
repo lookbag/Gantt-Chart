@@ -299,21 +299,31 @@ body {
     filter: brightness(0.9);
 }
 
+/* 1. 왼쪽 목록 영역 (스크롤바 숨김) */
 .tree-grid {
     flex: 1;
-    overflow-y: auto;
-    /* 세로 스크롤 허용 */
-    overflow-x: hidden;
-    /* 가로 스크롤 숨김 */
+    overflow-y: hidden !important;
+    /* [핵심] 왼쪽 세로 스크롤 완전 차단 */
+    overflow-x: auto;
+    /* 가로 스크롤은 유지 */
     padding-bottom: 20px;
-    /* 맨 아래 여유 공간 */
+
+    /* 브라우저 스크롤바 숨김 처리 */
+    -ms-overflow-style: none;
+    /* IE, Edge */
+    scrollbar-width: none;
+    /* Firefox */
 }
 
-/* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경) */
+.tree-grid::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari */
+}
+
+/* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경 및 높이 고정) */
 .tree-row {
     display: grid !important;
     grid-template-columns: 1fr 100px 90px 90px 60px 60px;
-    /* Owner 컬럼 폭 약간 넓힘 (100px) */
     align-items: center;
     height: var(--row-height) !important;
     min-height: var(--row-height) !important;
@@ -322,7 +332,6 @@ body {
     padding: 0 !important;
     box-sizing: border-box;
     overflow: hidden;
-    /* 높이 넘치는 것 방지 */
     transition: background 0.1s;
     position: relative;
 }
@@ -483,33 +492,40 @@ body {
 }
 
 /* --- Gantt Panel --- */
-/* 오른쪽 패널: 가로/세로 스크롤 모두 허용 */
+/* 2. 오른쪽 간트 패널 (메인 스크롤 역할) */
 .gantt-panel {
     flex: 1;
-    overflow: auto;
-    /* 상하좌우 스크롤 */
+    overflow: auto !important;
+    /* [핵심] 상하좌우 스크롤 허용 (여기가 메인) */
     position: relative;
     display: flex;
     flex-direction: column;
     background-color: var(--bg-white);
-    border-left: none;
-    /* Merged look */
+    border-left: 1px solid var(--border-color);
 }
 
 /* Header (Months/Days) */
-/* 간트 헤더 높이 확장 (Month + Week) */
+/* 3. 오른쪽 헤더 고정 (Sticky) */
+/* 스크롤 내려도 날짜(Jan, Feb...)는 상단에 붙어있게 함 */
+.gantt-header-container {
+    position: sticky !important;
+    top: 0;
+    z-index: 50;
+    background-color: #fff;
+}
+
 .gantt-header {
     height: 60px !important;
-    /* 30px + 30px */
+    position: sticky !important;
+    /* [핵심] 스크롤 시 상단 고정 */
+    top: 0;
+    z-index: 50;
+    /* 내용물보다 위에 뜨도록 */
+    background-color: #fff;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     /* 위아래 배치 */
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    /* 본문보다 높게 */
-    background-color: var(--bg-white);
-    border-bottom: 1px solid var(--border-color);
 }
 
 /* 상단 월(Month) 행 */

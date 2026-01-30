@@ -918,33 +918,30 @@ class GanttApp {
         document.getElementById('contextMenu').classList.add('hidden');
     }
 
-    // [신규 함수] 왼쪽 목록과 오른쪽 차트의 세로 스크롤 동기화
+    // [수정] 스크롤 동기화 (완벽한 일치 구현)
     bindScrollSync() {
         const tree = document.getElementById('treeGrid');
         const gantt = document.querySelector('.gantt-panel');
 
         if (!tree || !gantt) return;
 
-        let isSyncingLeft = false;
-        let isSyncingRight = false;
-
-        // 1. 왼쪽을 스크롤하면 -> 오른쪽도 이동
-        tree.addEventListener('scroll', () => {
-            if (!isSyncingLeft) {
-                isSyncingRight = true;
-                gantt.scrollTop = tree.scrollTop;
-            }
-            isSyncingLeft = false;
-        });
-
-        // 2. 오른쪽을 스크롤하면 -> 왼쪽도 이동
+        // 1. 오른쪽(Gantt)을 스크롤하면 -> 왼쪽(Tree)도 무조건 똑같은 위치로 이동
+        // (오른쪽이 'Master' 스크롤바 역할을 함)
         gantt.addEventListener('scroll', () => {
-            if (!isSyncingRight) {
-                isSyncingLeft = true;
-                tree.scrollTop = gantt.scrollTop;
-            }
-            isSyncingRight = false;
+            tree.scrollTop = gantt.scrollTop;
         });
+
+        // 2. 왼쪽(Tree) 위에서 마우스 휠을 굴리면 -> 오른쪽(Gantt)을 스크롤 시킴
+        // (왼쪽엔 스크롤바가 없으므로 이벤트를 납치해서 오른쪽에 전달)
+        tree.addEventListener('wheel', (e) => {
+            // 수직 스크롤(위아래)인 경우에만 작동
+            if (e.deltaY !== 0) {
+                // 왼쪽 자체의 스크롤 시도는 무시 (어차피 hidden이지만 확실하게)
+                e.preventDefault();
+                // 휠 굴린 만큼 오른쪽 패널을 이동시킴 -> 위 1번 이벤트가 발생해서 왼쪽도 따라감
+                gantt.scrollTop += e.deltaY;
+            }
+        }, { passive: false }); // preventDefault()를 쓰기 위해 passive: false 필수
     }
 
     handleMenuAction(action, taskId) {
