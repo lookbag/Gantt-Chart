@@ -401,33 +401,79 @@ class GanttApp {
 
         const filter = this.searchQuery.toLowerCase();
 
+        // 날짜 차이(일수) 계산 헬퍼 함수
+        const getDuration = (start, end) => {
+            const s = new Date(start);
+            const e = new Date(end);
+            const diffTime = Math.abs(e - s);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays + 1; // 당일 포함
+        };
+
         const renderItem = (task, depth = 0) => {
-            if (task.rowTaskId) return;
+            if (task.rowTaskId) return; // 같은 줄 아이템은 트리 목록에 표시 안 함
 
             const matchesFilter = task.label.toLowerCase().includes(filter);
             const hasVisibleChildren = this.tasks.some(t => t.parentId === task.id && (t.label.toLowerCase().includes(filter) || filter === ''));
-            const hasVisibleSegments = this.tasks.some(t => t.rowTaskId === task.id && t.label.toLowerCase().includes(filter));
 
-            if (filter !== '' && !matchesFilter && !hasVisibleChildren && !hasVisibleSegments) return;
+            if (filter !== '' && !matchesFilter && !hasVisibleChildren) return;
 
             const row = document.createElement('div');
-            row.className = 'tree-row';
+            // 기존 클래스 유지 + 프로젝트 타입이면 'project-row' 추가 (색상 강조용)
+            row.className = `tree-row ${task.parentId === null ? 'project-row' : ''}`;
             row.dataset.id = task.id;
-            row.style.paddingLeft = `${depth * 20 + 12}px`;
 
             const hasChildren = this.tasks.some(t => t.parentId === task.id);
+            const duration = getDuration(task.start, task.end);
 
+            // [소유자 표시] 실제 이름 매핑이 복잡하면 일단 ID 앞자리나 'User'로 표시
+            const ownerInitial = task.user_id ? 'Member' : '-';
+
+            // [그리드 셀 구성] CSS에서 정의한 6개 컬럼에 맞춰 div 생성
             row.innerHTML = `
-                <div class="tree-expander">
-                    ${hasChildren ? `<i data-lucide="${task.expanded ? 'chevron-down' : 'chevron-right'}"></i>` : ''}
+                <div class="tree-cell name-cell" style="padding-left: ${depth * 20 + 8}px;">
+                    <span class="tree-expander">
+                        ${hasChildren ? `<i data-lucide="${task.expanded ? 'chevron-down' : 'chevron-right'}"></i>` : ''}
+                    </span>
+                    <span class="tree-label-text">${task.label}</span>
+                    <button class="icon-btn more-btn" style="margin-left:auto; opacity:0;"><i data-lucide="more-vertical" style="width:14px;"></i></button>
                 </div>
-                <div class="tree-label">${task.label}</div>
-                <div class="tree-actions">
-                    <button class="icon-btn more-btn"><i data-lucide="more-vertical"></i></button>
+
+                <div class="tree-cell" style="color:#666;">
+                    ${ownerInitial}
+                </div>
+
+                <div class="tree-cell">
+                    ${task.start.substring(5).replace('-', '/')} 
+                </div>
+
+                <div class="tree-cell">
+                    ${task.end.substring(5).replace('-', '/')}
+                </div>
+
+                <div class="tree-cell">
+                    ${duration}d
+                </div>
+
+                <div class="tree-cell" style="flex-direction:column; justify-content:center; align-items: flex-start;">
+                    <span style="font-size:11px; font-weight:600;">${task.progress}%</span>
+                    <div class="cell-progress-bar">
+                        <div class="cell-progress-value" style="width: ${task.progress}%;"></div>
+                    </div>
                 </div>
             `;
 
             container.appendChild(row);
+
+            // more-btn 호버 효과 복구
+            row.addEventListener('mouseenter', () => {
+                const btn = row.querySelector('.more-btn');
+                if (btn) btn.style.opacity = '1';
+            });
+            row.addEventListener('mouseleave', () => {
+                const btn = row.querySelector('.more-btn');
+                if (btn) btn.style.opacity = '0';
+            });
 
             if (task.expanded || filter !== '') {
                 this.tasks
@@ -436,6 +482,7 @@ class GanttApp {
             }
         };
 
+        // 최상위 항목(프로젝트)부터 렌더링 시작
         this.tasks
             .filter(t => t.parentId === null)
             .forEach(task => renderItem(task));

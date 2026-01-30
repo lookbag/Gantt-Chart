@@ -9,18 +9,16 @@
     --bg-white: #ffffff;
     --bg-sidebar: #f5f6f8;
     --border-color: #e0e2e7;
-    /* Slightly refined border */
     --border-light: #e5e7eb;
     --bg-zebra: #f9fafb;
     --hover-bg: #e1f2ff;
-    /* [추가] 짝수 행 배경색 (줄무늬 효과) */
     --zebra-bg: #f9fafb;
     --font-family: 'Inter', sans-serif;
 
     --header-height: 56px;
-    --sidebar-width: 320px;
+    --sidebar-width: 700px;
+    /* 사이드바를 넓혀서 표를 넣을 공간 확보 */
     --row-height: 40px;
-    /* Unified Row Height */
     --transition: all 0.1s ease;
 }
 
@@ -305,19 +303,87 @@ body {
     overflow-x: hidden;
 }
 
-/* [중요 수정] 왼쪽 트리 목록 스타일 */
+/* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경) */
 .tree-row {
-    display: flex;
+    display: grid !important;
+    grid-template-columns: 1fr 80px 90px 90px 60px 80px;
+    /* 컬럼 비율 정의 */
     align-items: center;
     height: var(--row-height) !important;
-    /* 40px 강제 적용 */
     border-bottom: 1px solid var(--border-color) !important;
-    /* 가로줄 표시 */
+    padding: 0 !important;
     box-sizing: border-box;
-    padding-right: 8px;
-    cursor: default;
     transition: background 0.1s;
     position: relative;
+}
+
+/* 프로젝트(상위 폴더) 행 강조 */
+.tree-row.project-row {
+    background-color: #e3f2fd !important;
+    border-bottom: 1px solid #90caf9 !important;
+    font-weight: 700;
+    color: #1565c0;
+}
+
+.tree-row.project-row .tree-cell {
+    color: inherit;
+}
+
+/* 각 셀 스타일 */
+.tree-cell {
+    padding: 0 8px;
+    font-size: 13px;
+    border-right: 1px solid #f0f0f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-cell.name-cell {
+    justify-content: flex-start;
+}
+
+/* 그리드 헤더 스타일 */
+.grid-header-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 90px 90px 60px 80px;
+    height: 48px;
+    background-color: #f5f6f8;
+    border-bottom: 1px solid #ccc;
+    align-items: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: #333;
+}
+
+.grid-header-cell {
+    padding: 0 8px;
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    text-align: center;
+}
+
+.grid-header-cell:first-child {
+    text-align: left;
+    padding-left: 20px;
+}
+
+/* 진행률 바 스타일 */
+.cell-progress-bar {
+    width: 60px;
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.cell-progress-value {
+    height: 100%;
+    background: #00c875;
 }
 
 /* [추가] 왼쪽 목록 줄무늬 효과 */
