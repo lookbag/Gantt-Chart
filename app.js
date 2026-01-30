@@ -510,29 +510,29 @@ class GanttApp {
         }
     }
 
-    // [수정] 월(Month)과 주(Week) 2단 헤더 생성
+    // [수정] 헤더 높이 및 정렬 완벽 대응
     renderGanttTimeline() {
         const header = document.getElementById('ganttHeader');
         header.innerHTML = '';
 
-        // 1. 컨테이너 생성
+        // 1. 상단 행 (Month)
         const monthRow = document.createElement('div');
         monthRow.className = 'gantt-header-months';
 
+        // 2. 하단 행 (Week)
         const weekRow = document.createElement('div');
         weekRow.className = 'gantt-header-weeks';
 
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
         let cur = new Date(this.viewStart);
-        // 시작일을 해당 월의 1일로 조정 (Month 셀 그리기 위해)
-        cur.setDate(1);
+        cur.setDate(1); // 월의 1일부터 시작
 
         const adjustedEnd = new Date(this.viewEnd);
         adjustedEnd.setMonth(adjustedEnd.getMonth() + 1);
         adjustedEnd.setDate(0);
 
-        // 2. 월(Month) 그리기 루프
+        // --- 월(Month) 그리기 ---
         while (cur <= adjustedEnd) {
             const daysInMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
             const width = daysInMonth * this.pxPerDay;
@@ -540,26 +540,27 @@ class GanttApp {
             const cell = document.createElement('div');
             cell.className = 'month-cell';
             cell.style.width = `${width}px`;
+            // flex-shrink: 0 을 JS에서도 명시
+            cell.style.flexShrink = '0';
             cell.innerText = `${months[cur.getMonth()]} ${cur.getFullYear()}`;
             monthRow.appendChild(cell);
 
             cur.setMonth(cur.getMonth() + 1);
         }
 
-        // 3. 주(Week) 그리기 루프
-        // 실제 뷰 시작일부터 끝까지 7일 단위로 반복
+        // --- 주(Week) 그리기 ---
         let weekStart = new Date(this.viewStart);
-        // 주의 시작(일요일)으로 맞춤
+        // 일요일로 맞춤
         weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
         let weekCur = new Date(weekStart);
         const loopEnd = new Date(adjustedEnd);
-        loopEnd.setDate(loopEnd.getDate() + 7); // 여유분
+        loopEnd.setDate(loopEnd.getDate() + 7);
 
         while (weekCur <= loopEnd) {
             const weekWidth = 7 * this.pxPerDay;
 
-            // 1년 중 몇 번째 주인지 계산 (ISO 8601 week number logic simplified)
+            // 주차 계산
             const d = new Date(weekCur);
             d.setHours(0, 0, 0, 0);
             d.setDate(d.getDate() + 4 - (d.getDay() || 7));
@@ -569,7 +570,8 @@ class GanttApp {
             const cell = document.createElement('div');
             cell.className = 'week-cell';
             cell.style.width = `${weekWidth}px`;
-            cell.innerText = `W${weekNo}`; // "W1", "W2"...
+            cell.style.flexShrink = '0';
+            cell.innerText = `W${weekNo}`;
             weekRow.appendChild(cell);
 
             weekCur.setDate(weekCur.getDate() + 7);
@@ -578,7 +580,7 @@ class GanttApp {
         header.appendChild(monthRow);
         header.appendChild(weekRow);
 
-        // [배경 그리드 업데이트] 1주 간격(7일 * pxPerDay)에 맞춰 배경 세로줄 조정
+        // 배경 그리드 업데이트
         const body = document.getElementById('ganttBody');
         if (body) {
             const weekPx = 7 * this.pxPerDay;
@@ -918,30 +920,25 @@ class GanttApp {
         document.getElementById('contextMenu').classList.add('hidden');
     }
 
-    // [수정] 스크롤 동기화 (완벽한 일치 구현)
+    // [수정] 스크롤 동기화 (오른쪽이 Master, 왼쪽이 Slave)
     bindScrollSync() {
         const tree = document.getElementById('treeGrid');
         const gantt = document.querySelector('.gantt-panel');
 
         if (!tree || !gantt) return;
 
-        // 1. 오른쪽(Gantt)을 스크롤하면 -> 왼쪽(Tree)도 무조건 똑같은 위치로 이동
-        // (오른쪽이 'Master' 스크롤바 역할을 함)
+        // 1. 오른쪽(간트) 스크롤 -> 왼쪽(트리) 이동
         gantt.addEventListener('scroll', () => {
             tree.scrollTop = gantt.scrollTop;
         });
 
-        // 2. 왼쪽(Tree) 위에서 마우스 휠을 굴리면 -> 오른쪽(Gantt)을 스크롤 시킴
-        // (왼쪽엔 스크롤바가 없으므로 이벤트를 납치해서 오른쪽에 전달)
+        // 2. 왼쪽(트리) 휠 -> 오른쪽(간트) 이동
         tree.addEventListener('wheel', (e) => {
-            // 수직 스크롤(위아래)인 경우에만 작동
             if (e.deltaY !== 0) {
-                // 왼쪽 자체의 스크롤 시도는 무시 (어차피 hidden이지만 확실하게)
-                e.preventDefault();
-                // 휠 굴린 만큼 오른쪽 패널을 이동시킴 -> 위 1번 이벤트가 발생해서 왼쪽도 따라감
-                gantt.scrollTop += e.deltaY;
+                e.preventDefault(); // 왼쪽 자체 스크롤 막음
+                gantt.scrollTop += e.deltaY; // 오른쪽을 대신 움직임 -> 위 1번 이벤트 발동 -> 왼쪽 따라옴
             }
-        }, { passive: false }); // preventDefault()를 쓰기 위해 passive: false 필수
+        }, { passive: false });
     }
 
     handleMenuAction(action, taskId) {

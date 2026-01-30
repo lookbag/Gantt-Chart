@@ -15,10 +15,13 @@
     --zebra-bg: #f9fafb;
     --font-family: 'Inter', sans-serif;
 
-    --header-height: 56px;
-    --sidebar-width: 700px;
-    /* 사이드바를 넓혀서 표를 넣을 공간 확보 */
+    --header-top-height: 44px;
+    /* 상단 (HR / Jan 2026) 높이 */
+    --header-bottom-height: 40px;
+    /* 하단 (Task Name / Week) 높이 */
     --row-height: 40px;
+    /* 본문 행 높이 */
+    --sidebar-width: 700px;
     --transition: all 0.1s ease;
 }
 
@@ -255,13 +258,15 @@ body {
 }
 
 .panel-header {
-    height: 48px;
-    padding: 0 16px;
+    height: var(--header-top-height) !important;
+    min-height: var(--header-top-height) !important;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background-color: var(--bg-white);
+    padding: 0 16px;
+    background-color: #fff;
     border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
     position: relative;
 }
 
@@ -299,20 +304,10 @@ body {
     filter: brightness(0.9);
 }
 
-/* 1. 왼쪽 목록 영역 (스크롤바 숨김) */
 .tree-grid {
     flex: 1;
-    overflow-y: hidden !important;
-    /* [핵심] 왼쪽 세로 스크롤 완전 차단 */
-    overflow-x: auto;
-    /* 가로 스크롤은 유지 */
-    padding-bottom: 20px;
-
-    /* 브라우저 스크롤바 숨김 처리 */
-    -ms-overflow-style: none;
-    /* IE, Edge */
-    scrollbar-width: none;
-    /* Firefox */
+    overflow: hidden !important;
+    padding-bottom: 50px;
 }
 
 .tree-grid::-webkit-scrollbar {
@@ -320,7 +315,6 @@ body {
     /* Chrome, Safari */
 }
 
-/* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경 및 높이 고정) */
 .tree-row {
     display: grid !important;
     grid-template-columns: 1fr 100px 90px 90px 60px 60px;
@@ -328,7 +322,7 @@ body {
     height: var(--row-height) !important;
     min-height: var(--row-height) !important;
     max-height: var(--row-height) !important;
-    border-bottom: 1px solid var(--border-color) !important;
+    border-bottom: 1px solid #eee !important;
     padding: 0 !important;
     box-sizing: border-box;
     overflow: hidden;
@@ -368,17 +362,17 @@ body {
 
 /* 그리드 헤더 스타일 */
 .grid-header-row {
+    height: var(--header-bottom-height) !important;
+    min-height: var(--header-bottom-height) !important;
     display: grid;
     grid-template-columns: 1fr 100px 90px 90px 60px 60px;
-    /* Owner 폭 일치 */
-    height: 48px;
-    background-color: #eceff1;
-    /* 엑셀 헤더 느낌의 회색 */
-    border-bottom: 1px solid #ccc;
     align-items: center;
-    font-weight: 700;
-    font-size: 12px;
-    color: #333;
+    background-color: #f5f6f8;
+    /* 배경색 통일 */
+    border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
+    font-weight: 600;
+    color: #676879;
     padding-left: 10px;
 }
 
@@ -443,7 +437,7 @@ body {
     height: var(--row-height) !important;
     min-height: var(--row-height) !important;
     max-height: var(--row-height) !important;
-    border-bottom: 1px solid var(--border-color) !important;
+    border-bottom: 1px solid #eee !important;
     box-sizing: border-box;
     position: relative;
     width: 100%;
@@ -492,12 +486,9 @@ body {
 }
 
 /* --- Gantt Panel --- */
-/* 2. 오른쪽 간트 패널 (메인 스크롤 역할) */
 .gantt-panel {
     flex: 1;
     overflow: auto !important;
-    /* [핵심] 상하좌우 스크롤 허용 (여기가 메인) */
-    position: relative;
     display: flex;
     flex-direction: column;
     background-color: var(--bg-white);
@@ -515,59 +506,53 @@ body {
 }
 
 .gantt-header {
-    height: 60px !important;
-    position: sticky !important;
-    /* [핵심] 스크롤 시 상단 고정 */
-    top: 0;
-    z-index: 50;
-    /* 내용물보다 위에 뜨도록 */
-    background-color: #fff;
-    border-bottom: 1px solid var(--border-color);
+    height: calc(var(--header-top-height) + var(--header-bottom-height)) !important;
     display: flex;
     flex-direction: column;
-    /* 위아래 배치 */
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background-color: #fff;
+    border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
 }
 
 /* 상단 월(Month) 행 */
 .gantt-header-months {
+    height: var(--header-top-height) !important;
     display: flex;
-    height: 30px;
     border-bottom: 1px solid #eee;
+    box-sizing: border-box;
 }
 
-/* 하단 주(Week) 행 */
 .gantt-header-weeks {
+    height: var(--header-bottom-height) !important;
     display: flex;
-    height: 30px;
-    background-color: #fafafa;
-    /* 연한 회색 배경 */
+    background-color: #f5f6f8;
+    /* 왼쪽 Task Name 배경과 통일 */
+    box-sizing: border-box;
 }
 
 .month-cell {
-    border-right: 1px solid var(--border-color);
-    height: 30px;
-    /* 높이 고정 */
+    height: 100%;
+    /* 부모 높이 채움 */
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
     font-weight: 700;
-    color: #444;
-    flex-shrink: 0;
-    background-color: #fff;
+    border-right: 1px solid var(--border-color);
+    box-sizing: border-box;
 }
 
 /* 주(Week) 셀 스타일 - 요청하신 W1, W2 스타일 */
 .week-cell {
-    height: 30px;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 11px;
     color: #666;
-    border-right: 1px solid #eee;
-    /* 옅은 구분선 */
-    flex-shrink: 0;
+    border-right: 1px solid #e0e0e0;
     box-sizing: border-box;
 }
 
