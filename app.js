@@ -489,8 +489,8 @@ class GanttApp {
         };
         collectVisible();
 
-        // [중요 수정] CSS의 .tree-row 높이(36px)와 정확히 일치시켜야 함!
-        const ROW_HEIGHT = 36;
+        // [중요 수정] CSS의 .tree-row 높이(40px)와 정확히 일치시켜야 함!
+        const ROW_HEIGHT = 40;
 
         mainVisibleTasks.forEach((mainTask, index) => {
             // 1. 배경 줄 그리기 (가이드라인)
@@ -517,8 +517,8 @@ class GanttApp {
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
 
-                // [중요] 40px가 아니라 36px 기준으로 중앙 정렬 (6px top margin)
-                bar.style.top = `${index * ROW_HEIGHT + 6}px`;
+                // [중요] 40px 기준으로 중앙 정렬 (8px top margin)
+                bar.style.top = `${index * ROW_HEIGHT + 8}px`;
                 bar.dataset.id = task.id; // 삭제 시 이 ID를 참조함
 
                 // 색상 처리 (100% 검정)

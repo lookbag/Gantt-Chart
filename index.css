@@ -8,16 +8,18 @@
     --text-secondary: #676879;
     --bg-white: #ffffff;
     --bg-sidebar: #f5f6f8;
-    --border-color: #e0e2e7;
-    --hover-bg: #e1f2ff;
-    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    --border-color: #e5e7eb;
+    /* Slightly refined border */
+    --border-light: #e5e7eb;
+    --bg-zebra: #f9fafb;
+    --hover-bg: #f3f4f6;
+    --font-family: 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
     --header-height: 56px;
     --sidebar-width: 320px;
-    /* Reduced width */
-    --row-height: 36px;
-    /* Monday style compact rows */
-    --transition: all 0.1s ease;
+    --row-height: 40px;
+    /* Unified Row Height */
+    --transition: all 0.15s ease;
 }
 
 * {
@@ -47,12 +49,13 @@ body {
 .main-header {
     height: 56px !important;
     background-color: var(--bg-white);
-    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    /* Modern soft shadow */
+    border-bottom: none !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
     padding: 0 16px !important;
-    /* Reduced from 24px */
     z-index: 100;
     flex-wrap: nowrap !important;
     width: 100% !important;
@@ -303,15 +306,19 @@ body {
 .tree-row {
     display: flex;
     align-items: center;
-    height: 36px !important;
-    /* Forced height matching Monday style */
-    min-height: 36px !important;
-    border-bottom: 1px solid var(--border-color) !important;
-    /* Stronger horizontal focus */
+    height: var(--row-height) !important;
+    line-height: var(--row-height) !important;
+    min-height: var(--row-height) !important;
+    border-bottom: 1px solid var(--border-light) !important;
     padding-right: 8px;
     cursor: default;
     transition: background 0.1s;
     box-sizing: border-box;
+    position: relative;
+}
+
+.tree-row:nth-child(even) {
+    background-color: var(--bg-zebra);
 }
 
 .tree-row:hover {
@@ -399,13 +406,17 @@ body {
 }
 
 .gantt-row {
-    height: 36px !important;
-    /* Must match tree-row exactly */
-    min-height: 36px !important;
-    border-bottom: 1px solid var(--border-color) !important;
+    height: var(--row-height) !important;
+    line-height: var(--row-height) !important;
+    min-height: var(--row-height) !important;
+    border-bottom: 1px solid var(--border-light) !important;
     position: relative;
     width: 100%;
     box-sizing: border-box;
+}
+
+.gantt-row:nth-child(even) {
+    background-color: var(--bg-zebra);
 }
 
 .gantt-row:hover {
@@ -415,23 +426,27 @@ body {
 /* Bars */
 .gantt-bar {
     position: absolute;
-    top: 6px;
+    top: 8px;
+    /* Centered in 40px row for 24px bar */
     height: 24px;
-    /* Monday style slim bars */
-    border-radius: 4px;
-    /* Rounded 4px */
+    border-radius: 6px;
+    /* Rounded for SaaS feel */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    /* Floating effect */
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    /* Subtle outline */
     color: white;
-    font-size: 11px;
+    font-size: 12px;
+    /* Slightly larger */
+    font-weight: 500;
     display: flex;
     align-items: center;
     padding: 0 10px;
     cursor: grab;
     z-index: 20;
-    /* Higher than today indicator to 'float' above */
     transition: transform 0.1s, box-shadow 0.1s;
     user-select: none;
     overflow: hidden;
-    /* For progress fill clipping */
 }
 
 .gantt-bar:active {
@@ -443,8 +458,9 @@ body {
     top: 0;
     left: 0;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.25);
-    /* Darker overlay for progress */
+    background-color: rgba(0, 0, 0, 0.2);
+    /* Soft shadow feel */
+    border-radius: 6px 0 0 6px;
     z-index: -1;
 }
 
@@ -960,6 +976,45 @@ input[type="range"]::-webkit-slider-thumb {
 .otp-instruction p {
     font-size: 14px;
     line-height: 1.5;
+
+    /* [Add-on] Member Icon Overlap (Avatar Group) */
+    .project-member-icon {
+        border: 2px solid white !important;
+        /* Boundary between overlapped icons */
+        margin-left: -8px !important;
+        /* Overlap effect */
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        position: relative;
+        z-index: 1;
+        transition: transform 0.2s, z-index 0.2s;
+    }
+
+    .project-member-icon:hover {
+        transform: translateY(-2px);
+        z-index: 10;
+    }
+
+    /* [Add-on] Tree Indentation Guide Line (Simple) */
+    .tree-row[data-depth="1"]::before {
+        content: '';
+        position: absolute;
+        left: 16px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .tree-row[data-depth="2"]::before {
+        content: '';
+        position: absolute;
+        left: 32px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
     color: #444;
 }
 
