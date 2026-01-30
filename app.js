@@ -510,26 +510,80 @@ class GanttApp {
         }
     }
 
+    // [수정] 월(Month)과 주(Week) 2단 헤더 생성
     renderGanttTimeline() {
         const header = document.getElementById('ganttHeader');
         header.innerHTML = '';
 
+        // 1. 컨테이너 생성
+        const monthRow = document.createElement('div');
+        monthRow.className = 'gantt-header-months';
+
+        const weekRow = document.createElement('div');
+        weekRow.className = 'gantt-header-weeks';
+
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
         let cur = new Date(this.viewStart);
+        // 시작일을 해당 월의 1일로 조정 (Month 셀 그리기 위해)
         cur.setDate(1);
 
         const adjustedEnd = new Date(this.viewEnd);
         adjustedEnd.setMonth(adjustedEnd.getMonth() + 1);
         adjustedEnd.setDate(0);
 
+        // 2. 월(Month) 그리기 루프
         while (cur <= adjustedEnd) {
-            const monthCell = document.createElement('div');
-            monthCell.className = 'month-cell';
             const daysInMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
-            monthCell.style.width = `${daysInMonth * this.pxPerDay}px`;
-            monthCell.innerText = `${months[cur.getMonth()]}`;
-            header.appendChild(monthCell);
+            const width = daysInMonth * this.pxPerDay;
+
+            const cell = document.createElement('div');
+            cell.className = 'month-cell';
+            cell.style.width = `${width}px`;
+            cell.innerText = `${months[cur.getMonth()]} ${cur.getFullYear()}`;
+            monthRow.appendChild(cell);
+
             cur.setMonth(cur.getMonth() + 1);
+        }
+
+        // 3. 주(Week) 그리기 루프
+        // 실제 뷰 시작일부터 끝까지 7일 단위로 반복
+        let weekStart = new Date(this.viewStart);
+        // 주의 시작(일요일)으로 맞춤
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+
+        let weekCur = new Date(weekStart);
+        const loopEnd = new Date(adjustedEnd);
+        loopEnd.setDate(loopEnd.getDate() + 7); // 여유분
+
+        while (weekCur <= loopEnd) {
+            const weekWidth = 7 * this.pxPerDay;
+
+            // 1년 중 몇 번째 주인지 계산 (ISO 8601 week number logic simplified)
+            const d = new Date(weekCur);
+            d.setHours(0, 0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+
+            const cell = document.createElement('div');
+            cell.className = 'week-cell';
+            cell.style.width = `${weekWidth}px`;
+            cell.innerText = `W${weekNo}`; // "W1", "W2"...
+            weekRow.appendChild(cell);
+
+            weekCur.setDate(weekCur.getDate() + 7);
+        }
+
+        header.appendChild(monthRow);
+        header.appendChild(weekRow);
+
+        // [배경 그리드 업데이트] 1주 간격(7일 * pxPerDay)에 맞춰 배경 세로줄 조정
+        const body = document.getElementById('ganttBody');
+        if (body) {
+            const weekPx = 7 * this.pxPerDay;
+            body.style.backgroundSize = `${weekPx}px 100%`;
+            body.style.backgroundImage = `linear-gradient(to right, transparent ${weekPx - 1}px, #f0f0f0 ${weekPx}px)`;
         }
     }
 
@@ -556,13 +610,18 @@ class GanttApp {
         const ROW_HEIGHT = 40; // CSS와 동일하게 40px 고정
 
         mainVisibleTasks.forEach((mainTask) => {
-            // 1. 빈 줄 생성 (높이 확보용)
+            // 1. 줄 생성
             const row = document.createElement('div');
             row.className = 'gantt-row';
             row.style.height = `${ROW_HEIGHT}px`;
+
+            // [수정] 메인 프로젝트 행이면 배경색 파랗게 (트리와 통일)
+            if (mainTask.parentId === null) {
+                row.classList.add('project-row-bg');
+            }
             body.appendChild(row);
 
-            // [Issue 5 해결] Main Task(최상위 항목)는 간트 바를 그리지 않음
+            // [핵심 해결] 메인 프로젝트(최상위)는 바를 그리지 않고 여기서 종료 (return)
             if (mainTask.parentId === null) return;
 
             // 2. 바(Bar) 그리기 (Main Task가 아닐 때만)
@@ -874,11 +933,10 @@ class GanttApp {
         const projectName = document.getElementById('appTitle').innerText.trim();
         let labelName = "New Task";
 
-        // [Issue 4] Main Task(녹색 버튼)일 경우 이름 입력받기
+        // 메인 태스크는 이름만 입력받고 끝냄 (모달 안 띄움)
         if (!parentId && !rowTaskId) {
             const input = prompt("Enter Main Task Name:");
-            if (input === null) return; // 취소 누름
-            if (input.trim() === "") return;
+            if (input === null || input.trim() === "") return;
             labelName = input.trim();
         } else {
             labelName = rowTaskId ? 'Sub item' : 'Child item';
@@ -902,25 +960,24 @@ class GanttApp {
         };
 
         try {
-            // Supabase 저장
             const { data, error } = await this.supabase.from('tasks').insert([newTask]).select();
             if (error) throw error;
-
             const created = data[0];
             this.tasks.push(created);
 
-            // 화면 갱신
+            // 데이터 추가 후 화면 갱신
             this.renderAll();
 
-            // [Issue 2, 3 해결] 모달을 바로 띄우지 않고, 데이터가 렌더링된 후 필요하면 띄움
-            // Main Task는 이름 입력했으니 모달 안 띄움. 하위 아이템만 띄움.
+            // [안전 장치] 메인 태스크가 아닐 때만, 그리고 데이터가 확실히 있을 때만 모달 열기
             if (parentId || rowTaskId) {
-                // DOM 렌더링 시간 확보 후 모달 오픈
-                setTimeout(() => this.openEditModal(created.id), 100);
+                // DOM이 그려질 시간을 조금 줍니다 (50ms)
+                setTimeout(() => {
+                    if (created && created.id) this.openEditModal(created.id);
+                }, 50);
             }
         } catch (err) {
             console.error('Task Add Error:', err);
-            alert('Error adding task: ' + err.message);
+            // alert를 띄우지 않고 콘솔에만 기록하여 사용자 방해 최소화
         }
     }
 
