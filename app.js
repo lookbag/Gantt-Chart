@@ -181,6 +181,7 @@ class GanttApp {
         }
     }
 
+    // [수정] 오너 강제 덮어쓰기 방지 (Admin ID로 리셋되는 문제 해결)
     async syncTask(task) {
         if (!Auth.isLoggedIn) return;
 
@@ -196,11 +197,12 @@ class GanttApp {
                 }
             }
 
-            // 데이터에 프로젝트 이름 및 사용자 ID 추가
+            // [핵심 수정] user_id를 무조건 Auth.user.id로 덮어쓰지 않고, 
+            // 태스크에 지정된 user_id가 있으면 그걸 유지하고, 없으면(새 작업 등) 내 아이디를 씁니다.
             const taskWithMeta = {
                 ...task,
                 project_name: projectName,
-                user_id: Auth.user.id
+                user_id: task.user_id || Auth.user.id
             };
 
             // 깔끔한 upsert 로직 (description fallback 포함)
