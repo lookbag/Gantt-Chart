@@ -485,12 +485,11 @@ body {
     font-weight: 600;
 }
 
-/* --- Gantt Panel --- */
-/* 1. 오른쪽 패널 컨테이너 (스크롤 금지, 틀만 잡음) */
+/* 1. 간트 패널은 화면에 고정되어야 함 */
 .gantt-panel {
     flex: 1;
     overflow: hidden !important;
-    /* [변경] 전체 스크롤 막음 */
+    /* 패널 자체가 통째로 움직이는 것을 방지 */
     display: flex;
     flex-direction: column;
     position: relative;
@@ -508,9 +507,8 @@ body {
     background-color: #fff;
 }
 
-/* 2. 오른쪽 헤더 (고정됨, 가로 스크롤만 JS로 제어) */
+/* 2. 간트 헤더: 본문의 가로 스크롤에 반응해야 하므로 overflow hidden 유지 */
 .gantt-header {
-    /* sticky 제거 -> 그냥 상단에 고정 */
     height: calc(var(--header-top-height) + var(--header-bottom-height)) !important;
     display: flex;
     flex-direction: column;
@@ -518,9 +516,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     box-sizing: border-box;
     overflow: hidden !important;
-    /* [변경] 스크롤바 숨김 */
     flex-shrink: 0;
-    /* 찌그러짐 방지 */
     width: 100%;
 }
 
@@ -565,28 +561,29 @@ body {
 
 
 
-/* 3. 오른쪽 몸통 (여기가 진짜 스크롤 영역) */
+/* 3. 핵심 수정: 간트 바들이 그려지는 본문 영역 */
 .gantt-body {
     flex: 1;
-    /* 남은 공간 다 차지 */
-    overflow: auto !important;
-    /* [핵심] 상하좌우 스크롤은 여기서 발생 */
+    overflow-x: auto !important;
+    /* 가로 스크롤 활성화 */
+    overflow-y: scroll !important;
+    /* 상하 스크롤은 기존처럼 유지 */
     position: relative;
     background-color: var(--bg-white);
-    /* [핵심] CSS로 세로줄 그리기 (이미지 없이 성능 최적화) */
-    /* 210px은 7일 * 30px(pxPerDay)을 가정한 값. JS에서 동적으로 맞추겠지만 기본값 설정 */
-    background-size: 210px 100%;
-    background-image: linear-gradient(to right, transparent 209px, #f5f5f5 210px);
+    width: 100%;
+    /* 부모 너비를 따라가되 내부 자식에 의해 스크롤 생성 */
 }
 
-/* [중요 수정] 오른쪽 간트 차트 배경 줄 스타일 */
+/* 4. 내부 행(Row)의 너비를 강제로 고정하지 않음 */
 .gantt-row {
     height: var(--row-height) !important;
     border-bottom: 1px solid var(--border-color) !important;
     box-sizing: border-box;
     position: relative !important;
-    /* [중요] 이게 있어야 막대가 이 안에서 자리를 잡습니다 */
-    width: 100%;
+    width: max-content;
+    /* 내용물(타임라인)의 길이에 맞춰 늘어남 */
+    min-width: 100%;
+    /* 최소한 화면 너비는 채움 */
 }
 
 /* [추가] 오른쪽 차트 줄무늬 효과 */

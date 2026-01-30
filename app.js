@@ -681,6 +681,14 @@ class GanttApp {
         });
 
         body.style.height = `${mainVisibleTasks.length * ROW_HEIGHT + 50}px`;
+
+        // [추가] 전체 타임라인 너비 계산 및 적용
+        const totalDays = (this.viewEnd - this.viewStart) / (1000 * 60 * 60 * 24);
+        const totalWidth = totalDays * this.pxPerDay;
+
+        // 간트 본문의 내부 실제 너비를 설정하여 가로 스크롤바가 생기게 함
+        body.style.minWidth = `${totalWidth}px`;
+
         this.updateTodayIndicator();
     }
 
