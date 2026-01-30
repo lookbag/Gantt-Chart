@@ -250,6 +250,8 @@ body {
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    /* 패널 자체 스크롤 방지 */
 }
 
 .panel-header {
@@ -300,7 +302,11 @@ body {
 .tree-grid {
     flex: 1;
     overflow-y: auto;
+    /* 세로 스크롤 허용 */
     overflow-x: hidden;
+    /* 가로 스크롤 숨김 */
+    padding-bottom: 20px;
+    /* 맨 아래 여유 공간 */
 }
 
 /* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경) */
@@ -477,11 +483,15 @@ body {
 }
 
 /* --- Gantt Panel --- */
+/* 오른쪽 패널: 가로/세로 스크롤 모두 허용 */
 .gantt-panel {
     flex: 1;
     overflow: auto;
-    background-color: var(--bg-white);
+    /* 상하좌우 스크롤 */
     position: relative;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-white);
     border-left: none;
     /* Merged look */
 }
@@ -1194,4 +1204,23 @@ input[type="range"]::-webkit-slider-thumb {
 
 .otp-input:focus {
     border-color: var(--success-color) !important;
+}
+
+/* 스크롤바 디자인 (선택 사항 - 깔끔하게) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #bbb;
 }

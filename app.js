@@ -894,6 +894,9 @@ class GanttApp {
         document.getElementById('editTaskProgress').oninput = (e) => {
             document.getElementById('progressValue').innerText = `${e.target.value}%`;
         };
+
+        // [추가] 스크롤 동기화 함수 실행
+        this.bindScrollSync();
     }
 
     shiftView(type, days) {
@@ -913,6 +916,35 @@ class GanttApp {
 
     hideContextMenu() {
         document.getElementById('contextMenu').classList.add('hidden');
+    }
+
+    // [신규 함수] 왼쪽 목록과 오른쪽 차트의 세로 스크롤 동기화
+    bindScrollSync() {
+        const tree = document.getElementById('treeGrid');
+        const gantt = document.querySelector('.gantt-panel');
+
+        if (!tree || !gantt) return;
+
+        let isSyncingLeft = false;
+        let isSyncingRight = false;
+
+        // 1. 왼쪽을 스크롤하면 -> 오른쪽도 이동
+        tree.addEventListener('scroll', () => {
+            if (!isSyncingLeft) {
+                isSyncingRight = true;
+                gantt.scrollTop = tree.scrollTop;
+            }
+            isSyncingLeft = false;
+        });
+
+        // 2. 오른쪽을 스크롤하면 -> 왼쪽도 이동
+        gantt.addEventListener('scroll', () => {
+            if (!isSyncingRight) {
+                isSyncingLeft = true;
+                tree.scrollTop = gantt.scrollTop;
+            }
+            isSyncingRight = false;
+        });
     }
 
     handleMenuAction(action, taskId) {
