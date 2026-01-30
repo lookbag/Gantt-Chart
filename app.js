@@ -468,45 +468,46 @@ class GanttApp {
 
     renderGanttBars() {
         const body = document.getElementById('ganttBody');
-        // 기존 바 삭제
         const oldContent = body.querySelectorAll('.gantt-bar, .gantt-row');
         oldContent.forEach(b => b.remove());
 
         const filter = this.searchQuery.toLowerCase();
         const mainVisibleTasks = [];
 
-        // 화면에 보여질 태스크 수집
+        // 화면에 보여질 태스크 수집 (기존 로직 유지)
         const collectVisible = (parentId = null) => {
             this.tasks.filter(t => t.parentId === parentId && !t.rowTaskId).forEach(t => {
                 const matches = t.label.toLowerCase().includes(filter);
-                const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && child.expanded);
-                // 필터가 없으면 무조건 보임, 있으면 매칭되는 것만
-                if (filter === '' || matches || hasVisibleChild) {
+                const sameRowMatches = this.tasks.some(s => s.rowTaskId === t.id && s.label.toLowerCase().includes(filter));
+                const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && (child.label.toLowerCase().includes(filter) || filter === ''));
+
+                if (filter === '' || matches || sameRowMatches || hasVisibleChild) {
                     mainVisibleTasks.push(t);
-                    if (t.expanded) collectVisible(t.id);
+                    if (t.expanded || filter !== '') collectVisible(t.id);
                 }
             });
         };
         collectVisible();
 
-        // [중요 수정] CSS의 .tree-row 높이(40px)와 정확히 일치시켜야 함!
+        // [핵심 수정] CSS와 동일하게 40px로 설정
         const ROW_HEIGHT = 40;
 
         mainVisibleTasks.forEach((mainTask, index) => {
             // 1. 배경 줄 그리기 (가이드라인)
             const row = document.createElement('div');
             row.className = 'gantt-row';
-            row.style.top = `${index * ROW_HEIGHT}px`; // 위치 강제 지정
+            // CSS에서 height를 40px로 잡았으므로 여기서도 맞춰줍니다.
             row.style.height = `${ROW_HEIGHT}px`;
+            row.style.top = `${index * ROW_HEIGHT}px`; // 절대 위치 잡기 (필요 시)
+
             body.appendChild(row);
 
-            // 2. 이 줄에 포함될 모든 바(Bar) 찾기 (본인 + 같은 줄 아이템)
+            // 2. 이 줄에 포함될 바(Bar) 그리기
             const rowTasks = [mainTask, ...this.tasks.filter(t => t.rowTaskId === mainTask.id)];
 
             rowTasks.forEach(task => {
                 const start = new Date(task.start);
                 const end = new Date(task.end);
-
                 const left = (start - this.viewStart) / (1000 * 60 * 60 * 24) * this.pxPerDay;
                 const width = (end - start) / (1000 * 60 * 60 * 24) * this.pxPerDay;
 
@@ -517,9 +518,11 @@ class GanttApp {
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
 
-                // [중요] 40px 기준으로 중앙 정렬 (8px top margin)
+                // [중요] 40px 높이 내에서 중앙 정렬 (Top margin 8px)
+                // index * 40 + 8
                 bar.style.top = `${index * ROW_HEIGHT + 8}px`;
-                bar.dataset.id = task.id; // 삭제 시 이 ID를 참조함
+
+                bar.dataset.id = task.id;
 
                 // 색상 처리 (100% 검정)
                 let barColor = task.color;
@@ -533,18 +536,18 @@ class GanttApp {
                     <div class="resizer resizer-r"></div>
                 `;
 
-                // 우클릭 이벤트 연결 (정확한 ID 전달)
+                // 우클릭 이벤트
                 bar.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.showContextMenu(e, task.id); // 여기서 task.id를 정확히 넘겨야 삭제가 됨
+                    this.showContextMenu(e, task.id);
                 });
 
                 body.appendChild(bar);
             });
         });
 
-        // 간트 차트 전체 높이 조정 (스크롤 동기화용)
+        // 전체 높이 조정
         body.style.height = `${mainVisibleTasks.length * ROW_HEIGHT + 50}px`;
     }
 

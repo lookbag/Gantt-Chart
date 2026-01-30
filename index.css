@@ -8,18 +8,20 @@
     --text-secondary: #676879;
     --bg-white: #ffffff;
     --bg-sidebar: #f5f6f8;
-    --border-color: #e5e7eb;
+    --border-color: #e0e2e7;
     /* Slightly refined border */
     --border-light: #e5e7eb;
     --bg-zebra: #f9fafb;
-    --hover-bg: #f3f4f6;
-    --font-family: 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --hover-bg: #e1f2ff;
+    /* [추가] 짝수 행 배경색 (줄무늬 효과) */
+    --zebra-bg: #f9fafb;
+    --font-family: 'Inter', sans-serif;
 
     --header-height: 56px;
     --sidebar-width: 320px;
     --row-height: 40px;
     /* Unified Row Height */
-    --transition: all 0.15s ease;
+    --transition: all 0.1s ease;
 }
 
 * {
@@ -303,22 +305,24 @@ body {
     overflow-x: hidden;
 }
 
+/* [중요 수정] 왼쪽 트리 목록 스타일 */
 .tree-row {
     display: flex;
     align-items: center;
     height: var(--row-height) !important;
-    line-height: var(--row-height) !important;
-    min-height: var(--row-height) !important;
-    border-bottom: 1px solid var(--border-light) !important;
+    /* 40px 강제 적용 */
+    border-bottom: 1px solid var(--border-color) !important;
+    /* 가로줄 표시 */
+    box-sizing: border-box;
     padding-right: 8px;
     cursor: default;
     transition: background 0.1s;
-    box-sizing: border-box;
     position: relative;
 }
 
+/* [추가] 왼쪽 목록 줄무늬 효과 */
 .tree-row:nth-child(even) {
-    background-color: var(--bg-zebra);
+    background-color: var(--zebra-bg);
 }
 
 .tree-row:hover {
@@ -405,33 +409,36 @@ body {
     background-color: var(--bg-white);
 }
 
+/* [중요 수정] 오른쪽 간트 차트 배경 줄 스타일 */
 .gantt-row {
     height: var(--row-height) !important;
-    line-height: var(--row-height) !important;
-    min-height: var(--row-height) !important;
-    border-bottom: 1px solid var(--border-light) !important;
+    /* 40px 강제 적용 */
+    border-bottom: 1px solid var(--border-color) !important;
+    /* 가로줄 표시 */
+    box-sizing: border-box;
     position: relative;
     width: 100%;
-    box-sizing: border-box;
 }
 
+/* [추가] 오른쪽 차트 줄무늬 효과 */
 .gantt-row:nth-child(even) {
-    background-color: var(--bg-zebra);
+    background-color: var(--zebra-bg);
 }
 
 .gantt-row:hover {
     background-color: var(--hover-bg);
 }
 
-/* Bars */
+/* [중요 수정] 막대 위치 조정 */
 .gantt-bar {
     position: absolute;
-    top: 8px;
+    /* 40px 높이 중앙 정렬: (40 - 24) / 2 = 8px */
+    top: 8px !important;
     /* Centered in 40px row for 24px bar */
     height: 24px;
     border-radius: 6px;
     /* Rounded for SaaS feel */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     /* Floating effect */
     border: 1px solid rgba(0, 0, 0, 0.05);
     /* Subtle outline */
