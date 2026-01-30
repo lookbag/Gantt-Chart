@@ -28,6 +28,9 @@
                     <button class="icon-btn" id="headerNewProjectBtn" title="New Project"><i
                             data-lucide="plus"></i></button>
 
+                    <div id="projectMemberContainer" style="display: flex; align-items: center; margin-left: 10px;">
+                    </div>
+
                     <div id="projectDropdown" class="context-menu hidden" style="top: 40px; left: 0; width: 220px;">
                         <ul id="projectListItems">
                         </ul>
@@ -38,7 +41,8 @@
             <div class="header-right">
                 <div class="search-bar">
                     <i data-lucide="search"></i>
-                    <input type="text" id="searchInput" placeholder="Search">
+                    <input type="text" id="searchInput" placeholder="Search" autocomplete="off"
+                        name="search_task_unique">
                 </div>
 
                 <div class="timeline-controls">
@@ -86,7 +90,7 @@
                     <div class="grid-header-cell">Owner</div>
                     <div class="grid-header-cell">Start</div>
                     <div class="grid-header-cell">Due</div>
-                    <div class="grid-header-cell">Days</div>
+                    <div class="grid-header-cell">D-Day</div>
                     <div class="grid-header-cell">%</div>
                 </div>
 

@@ -34,6 +34,13 @@ class GanttApp {
         this.setupRealtime();
 
         if (Auth.isLoggedIn) {
+            // [안전 패치] 로그인 시 검색창 비우기
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = '';
+                this.searchQuery = '';
+            }
+
             if (this.activeProject) {
                 this.loadTasks();
             } else {
@@ -76,10 +83,8 @@ class GanttApp {
             }
             document.getElementById('appTitle').innerText = projectName;
 
-            // [추가] 멤버 이니셜 아이콘 표시 실행
+            // [안전 패치] 멤버 아이콘 및 정보 로드
             this.renderProjectMemberIcons(projectName);
-
-            // [추가] 프로젝트 멤버 목록 가져오기 (Owner 선택용)
             await this.fetchProjectMembers(projectName);
 
             // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
@@ -432,11 +437,19 @@ class GanttApp {
         container.innerHTML = '';
         const filter = this.searchQuery.toLowerCase();
 
-        // 헬퍼: 날짜 계산
-        const getDuration = (s, e) => {
-            if (!s || !e) return '-';
-            const diff = Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24));
-            return (diff + 1) + 'd';
+        // [안전 패치] D-Day 계산 함수 (기존 getDuration 대체)
+        const getRemainingDays = (end) => {
+            if (!end) return '-';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const endDate = new Date(end);
+            endDate.setHours(0, 0, 0, 0);
+            const diffTime = endDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) return `D+${Math.abs(diffDays)}`;
+            if (diffDays === 0) return `D-Day`;
+            return `D-${diffDays}`;
         };
 
         // [소유자 옵션 HTML 생성]
@@ -448,25 +461,28 @@ class GanttApp {
                 const name = m.display_name || m.email.split('@')[0];
                 options += `<option value="${m.id}" ${selected}>${name}</option>`;
             });
-            // onchange 이벤트로 즉시 업데이트
             return `<select class="owner-select" onchange="app.updateTaskOwner('${taskId}', this.value)" onclick="event.stopPropagation()">${options}</select>`;
         };
 
         const renderItem = (task, depth = 0) => {
-            if (task.rowTaskId) return; // Same Row Item은 트리에서 제외
+            if (task.rowTaskId) return;
 
-            // 필터 로직
             const matches = task.label.toLowerCase().includes(filter);
             const hasVisibleChild = this.tasks.some(t => t.parentId === task.id && (t.label.toLowerCase().includes(filter) || filter === ''));
             if (filter !== '' && !matches && !hasVisibleChild) return;
 
             const row = document.createElement('div');
-            // 'project-row' 클래스: 최상위(parentId가 없는) 항목에만 적용
             row.className = `tree-row ${!task.parentId ? 'project-row' : ''}`;
             row.dataset.id = task.id;
 
             const hasChildren = this.tasks.some(t => t.parentId === task.id);
             const indent = depth * 20 + 8;
+
+            // [안전 패치] D-Day 값 및 색상 적용
+            const dDay = getRemainingDays(task.end);
+            let dDayColor = '#333';
+            if (dDay.startsWith('D+')) dDayColor = '#e2445c'; // 지남 (빨강)
+            else if (dDay === 'D-Day') dDayColor = '#fdab3d'; // 당일 (주황)
 
             row.innerHTML = `
                 <div class="tree-cell name-cell" style="padding-left: ${indent}px;">
@@ -479,7 +495,7 @@ class GanttApp {
                 <div class="tree-cell">${createOwnerSelect(task.id, task.user_id)}</div>
                 <div class="tree-cell">${task.start ? task.start.substring(5).replace('-', '/') : '-'}</div>
                 <div class="tree-cell">${task.end ? task.end.substring(5).replace('-', '/') : '-'}</div>
-                <div class="tree-cell">${getDuration(task.start, task.end)}</div>
+                <div class="tree-cell" style="color: ${dDayColor}; font-weight:600;">${dDay}</div>
                 <div class="tree-cell" style="flex-direction:column; justify-content:center; align-items: flex-start;">
                     <span style="font-size:10px;">${task.progress}%</span>
                     <div class="cell-progress-bar"><div class="cell-progress-value" style="width: ${task.progress}%;"></div></div>
@@ -487,7 +503,6 @@ class GanttApp {
             `;
             container.appendChild(row);
 
-            // 이벤트 리스너 (더보기 버튼 등)
             row.addEventListener('mouseenter', () => { const b = row.querySelector('.more-btn'); if (b) b.style.opacity = '1'; });
             row.addEventListener('mouseleave', () => { const b = row.querySelector('.more-btn'); if (b) b.style.opacity = '0'; });
 
@@ -953,11 +968,10 @@ class GanttApp {
             case 'newChild': this.addNewTask(taskId); break;
             case 'newSameRow': this.addNewTask(null, taskId); break;
             case 'delete': this.deleteTask(taskId); break;
-            case 'moveUp': this.moveTask(taskId, -1); break;   // 위로 이동
-            case 'moveDown': this.moveTask(taskId, 1); break;  // 아래로 이동
-            case 'copy': console.log('Copy'); break;
-            case 'paste': console.log('Paste'); break;
-            case 'template': console.log('Template'); break;
+            case 'moveUp': this.moveTask(taskId, -1); break;
+            case 'moveDown': this.moveTask(taskId, 1); break;
+            case 'copy': this.copyTask(taskId); break;
+            case 'paste': this.pasteTask(taskId); break;
         }
     }
 
@@ -1113,41 +1127,43 @@ class GanttApp {
         this.editingTaskId = null;
     }
 
+    // [안전 패치] 모달이 안 닫히는 문제 해결
     async saveTask() {
         if (!this.editingTaskId) return;
-        const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
-
-        task.label = document.getElementById('editTaskLabel').value;
-        task.start = document.getElementById('editTaskStart').value;
-        task.end = document.getElementById('editTaskEnd').value;
-        task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
-        task.progress = parseInt(document.getElementById('editTaskProgress').value);
-        task.type = document.getElementById('editTaskType').value;
-        task.state = document.getElementById('editTaskState').value;
-        task.description = document.getElementById('editTaskDescription').value;
-
-        // [New] 선택된 컬러 값을 가져와서 저장
-        const selectedColor = document.getElementById('editTaskColorValue').value;
-        if (selectedColor) {
-            task.color = selectedColor;
-        }
-
-        await this.syncTask(task);
-        this.renderAll();
-        this.closeEditModal();
-    }
-
-    // [신규 함수] 프로젝트 멤버 이니셜 표시
-    async renderProjectMemberIcons(projectName) {
-        // 아이콘을 넣을 위치 찾기 (HR 제목 옆)
-        const headerContainer = document.querySelector('.header-left .logo').parentNode;
-
-        // 기존에 그려진 아이콘이 있다면 삭제 (중복 방지)
-        const oldIcons = headerContainer.querySelectorAll('.project-member-icon');
-        oldIcons.forEach(el => el.remove());
 
         try {
-            // 1. 이 프로젝트의 멤버 ID 조회
+            const task = this.tasks.find(t => String(t.id) === String(this.editingTaskId));
+            if (!task) throw new Error("Task not found");
+
+            task.label = document.getElementById('editTaskLabel').value;
+            task.start = document.getElementById('editTaskStart').value;
+            task.end = document.getElementById('editTaskEnd').value;
+            task.weekdays = parseInt(document.getElementById('editTaskWeekdays').value);
+            task.progress = parseInt(document.getElementById('editTaskProgress').value);
+            task.type = document.getElementById('editTaskType').value;
+            task.state = document.getElementById('editTaskState').value;
+            task.description = document.getElementById('editTaskDescription').value;
+
+            const selectedColor = document.getElementById('editTaskColorValue').value;
+            if (selectedColor) task.color = selectedColor;
+
+            await this.syncTask(task);
+            this.renderAll();
+            this.closeEditModal();
+        } catch (e) {
+            console.error("Save failed:", e);
+            alert("저장 중 오류가 발생했습니다.");
+        }
+    }
+
+    // [안전 패치] 아이콘 중복 방지 로직 강화
+    async renderProjectMemberIcons(projectName) {
+        const container = document.getElementById('projectMemberContainer');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        try {
             const { data: perms } = await this.supabase
                 .from('user_permissions')
                 .select('user_id')
@@ -1155,10 +1171,7 @@ class GanttApp {
                 .eq('is_approved', true);
 
             if (!perms || perms.length === 0) return;
-
             const userIds = perms.map(p => p.user_id);
-
-            // 2. 프로필 정보(이름) 조회
             const { data: profiles } = await this.supabase
                 .from('profiles')
                 .select('display_name, email')
@@ -1166,37 +1179,101 @@ class GanttApp {
 
             if (!profiles) return;
 
-            // 3. 아이콘 생성 및 부착
             profiles.forEach(user => {
                 const name = user.display_name || user.email;
                 const initial = name.charAt(0).toUpperCase();
-
                 const badge = document.createElement('div');
-                badge.className = 'project-member-icon'; // CSS 스타일링용 클래스
+                badge.className = 'project-member-icon';
                 badge.innerText = initial;
-                badge.title = name; // 마우스 올리면 이름 나옴
+                badge.title = name;
 
-                // 스타일 직접 지정 (CSS 파일에 넣어도 됨)
                 Object.assign(badge.style, {
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FF7575', // 요청하신 붉은색 계열
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginLeft: '8px',
-                    cursor: 'help'
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    backgroundColor: '#FF7575', color: 'white', fontSize: '12px',
+                    fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginLeft: '-8px', cursor: 'help', border: '2px solid white'
                 });
-
-                headerContainer.appendChild(badge);
+                container.appendChild(badge);
             });
+            if (container.firstChild) container.firstChild.style.marginLeft = '0';
 
-        } catch (e) {
-            console.error("멤버 아이콘 로드 실패", e);
+        } catch (e) { console.error("멤버 아이콘 로드 실패", e); }
+    }
+
+    // [신규 기능] 복사
+    copyTask(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const tasksToCopy = [];
+        const findDescendants = (parentId) => {
+            const children = this.tasks.filter(t => t.parentId === parentId);
+            children.forEach(child => {
+                tasksToCopy.push(child);
+                findDescendants(child.id);
+            });
+        };
+
+        tasksToCopy.push(task);
+        findDescendants(taskId);
+
+        this.clipboard = JSON.parse(JSON.stringify(tasksToCopy));
+        alert(`${tasksToCopy.length}개 항목이 복사되었습니다.`);
+    }
+
+    // [신규 기능] 붙여넣기
+    async pasteTask(targetParentId) {
+        if (!this.clipboard || this.clipboard.length === 0) {
+            alert("클립보드가 비어있습니다.");
+            return;
+        }
+
+        const projectName = document.getElementById('appTitle').innerText.trim();
+        const idMap = {};
+        const newTasks = this.clipboard.map(t => ({ ...t, oldId: t.id }));
+
+        try {
+            const rootItem = newTasks[0];
+            const rootInsertData = {
+                ...rootItem,
+                id: undefined, oldId: undefined,
+                parentId: targetParentId,
+                project_name: projectName,
+                user_id: Auth.user.id,
+                label: rootItem.label + " (Copy)"
+            };
+
+            const { data: rootData, error: rootError } = await this.supabase.from('tasks').insert([rootInsertData]).select();
+            if (rootError) throw rootError;
+
+            const newRootId = rootData[0].id;
+            idMap[rootItem.oldId] = newRootId;
+
+            const descendants = newTasks.slice(1);
+            for (const item of descendants) {
+                const newParentId = idMap[item.parentId];
+                if (!newParentId) continue;
+
+                const insertData = {
+                    ...item,
+                    id: undefined, oldId: undefined,
+                    parentId: newParentId,
+                    project_name: projectName,
+                    user_id: Auth.user.id
+                };
+
+                const { data, error } = await this.supabase.from('tasks').insert([insertData]).select();
+                if (!error && data) {
+                    idMap[item.oldId] = data[0].id;
+                }
+            }
+
+            await this.loadTasks();
+            alert("붙여넣기 완료");
+
+        } catch (err) {
+            console.error("Paste error:", err);
+            alert("붙여넣기 실패");
         }
     }
 }
