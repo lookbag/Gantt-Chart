@@ -480,11 +480,7 @@ class GanttApp {
             const hasChildren = this.tasks.some(t => t.parentId === task.id);
             const indent = depth * 20 + 8;
 
-            // [안전 패치] D-Day 값 및 색상 적용
-            const dDay = getRemainingDays(task.end);
-            let dDayColor = '#333';
-            if (dDay.startsWith('D+')) dDayColor = '#e2445c'; // 지남 (빨강)
-            else if (dDay === 'D-Day') dDayColor = '#fdab3d'; // 당일 (주황)
+            const isMainTask = !task.parentId; // 부모가 없으면 메인 태스크
 
             row.innerHTML = `
                 <div class="tree-cell name-cell" style="padding-left: ${indent}px;">
@@ -495,9 +491,13 @@ class GanttApp {
                     <button class="icon-btn more-btn" style="margin-left:auto; opacity:0;"><i data-lucide="more-vertical" style="width:14px;"></i></button>
                 </div>
                 <div class="tree-cell">${createOwnerSelect(task.id, task.user_id)}</div>
-                <div class="tree-cell">${task.start ? task.start.substring(5).replace('-', '/') : '-'}</div>
-                <div class="tree-cell">${task.end ? task.end.substring(5).replace('-', '/') : '-'}</div>
-                <div class="tree-cell" style="color: ${dDayColor}; font-weight:600;">${dDay}</div>
+                
+                <div class="tree-cell">${isMainTask ? '' : (task.start ? task.start.substring(5).replace('-', '/') : '-')}</div>
+                <div class="tree-cell">${isMainTask ? '' : (task.end ? task.end.substring(5).replace('-', '/') : '-')}</div>
+                <div class="tree-cell" style="color: ${isMainTask ? 'transparent' : dDayColor}; font-weight:600;">
+                    ${isMainTask ? '' : dDay}
+                </div>
+                
                 <div class="tree-cell" style="flex-direction:column; justify-content:center; align-items: flex-start;">
                     <span style="font-size:10px;">${task.progress}%</span>
                     <div class="cell-progress-bar"><div class="cell-progress-value" style="width: ${task.progress}%;"></div></div>
@@ -1068,40 +1068,49 @@ class GanttApp {
         this.renderAll();
     }
 
-    /**
-     * 1. 순서 이동 로직: 같은 부모 내에서 한 칸씩만 이동
-     */
     async moveTask(id, dir) {
         const task = this.tasks.find(t => String(t.id) === String(id));
         if (!task) return;
 
-        // 같은 부모와 같은 Row 관계에 있는 형제들만 추출 및 정렬
+        // 1. 같은 부모를 가진 '형제'들만 모아서 현재 순서대로 정렬
         const siblings = this.tasks
             .filter(t => t.parentId === task.parentId && t.rowTaskId === task.rowTaskId)
             .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
+        // 2. 형제들 사이에서 나의 현재 위치 찾기
         const currentIndex = siblings.findIndex(t => String(t.id) === String(id));
         const targetIndex = currentIndex + dir;
 
-        if (targetIndex < 0 || targetIndex >= siblings.length) return; // 범위를 벗어나면 중단
+        // 3. 범위를 벗어나면(맨 위에서 위로, 맨 아래에서 아래로) 중단
+        if (targetIndex < 0 || targetIndex >= siblings.length) return;
 
         const targetTask = siblings[targetIndex];
 
-        // 서로의 sort_order 교환
-        const tempOrder = task.sort_order || currentIndex;
-        task.sort_order = targetTask.sort_order || targetIndex;
-        targetTask.sort_order = tempOrder;
+        // 4. 서로의 sort_order 값을 확실하게 맞바꿈
+        const currentOrder = task.sort_order || 0;
+        const targetOrder = targetTask.sort_order || 0;
 
-        // DB 업데이트 및 화면 갱신
+        task.sort_order = targetOrder;
+        targetTask.sort_order = currentOrder;
+
+        // 5. 만약 두 값이 같다면 강제로 차이를 둠 (정렬 보장)
+        if (task.sort_order === targetTask.sort_order) {
+            task.sort_order = targetIndex;
+            targetTask.sort_order = currentIndex;
+        }
+
+        // 6. 로컬 배열 재정렬 후 즉시 렌더링 (체감 속도 향상)
+        this.tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        this.renderAll();
+
+        // 7. DB에 변경된 순서 저장
         try {
             await this.supabase.from('tasks').upsert([
                 { id: task.id, sort_order: task.sort_order },
                 { id: targetTask.id, sort_order: targetTask.sort_order }
             ]);
-            this.tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-            this.renderAll();
         } catch (e) {
-            console.error("이동 저장 실패:", e);
+            console.error("순서 저장 실패:", e);
         }
     }
 
