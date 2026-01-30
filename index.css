@@ -306,13 +306,17 @@ body {
 /* [중요 수정] 왼쪽 트리 목록 스타일 (Grid로 변경) */
 .tree-row {
     display: grid !important;
-    grid-template-columns: 1fr 80px 90px 90px 60px 80px;
-    /* 컬럼 비율 정의 */
+    grid-template-columns: 1fr 100px 90px 90px 60px 60px;
+    /* Owner 컬럼 폭 약간 넓힘 (100px) */
     align-items: center;
     height: var(--row-height) !important;
+    min-height: var(--row-height) !important;
+    max-height: var(--row-height) !important;
     border-bottom: 1px solid var(--border-color) !important;
     padding: 0 !important;
     box-sizing: border-box;
+    overflow: hidden;
+    /* 높이 넘치는 것 방지 */
     transition: background 0.1s;
     position: relative;
 }
@@ -350,14 +354,17 @@ body {
 /* 그리드 헤더 스타일 */
 .grid-header-row {
     display: grid;
-    grid-template-columns: 1fr 80px 90px 90px 60px 80px;
+    grid-template-columns: 1fr 100px 90px 90px 60px 60px;
+    /* Owner 폭 일치 */
     height: 48px;
-    background-color: #f5f6f8;
+    background-color: #eceff1;
+    /* 엑셀 헤더 느낌의 회색 */
     border-bottom: 1px solid #ccc;
     align-items: center;
     font-weight: 700;
     font-size: 12px;
     color: #333;
+    padding-left: 10px;
 }
 
 .grid-header-cell {
@@ -386,6 +393,23 @@ body {
     background: #00c875;
 }
 
+/* 소유자 선택 드롭다운 (표 안에서 깔끔하게) */
+.owner-select {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
+    outline: none;
+    padding: 0 4px;
+    height: 100%;
+}
+
+.owner-select:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
 /* [추가] 왼쪽 목록 줄무늬 효과 */
 .tree-row:nth-child(even) {
     background-color: var(--zebra-bg);
@@ -397,6 +421,26 @@ body {
 
 .tree-row.selected {
     background-color: #f0f7ff;
+}
+
+/* [중요 수정] 오른쪽 간트 차트 행 (왼쪽과 정확히 일치시킴) */
+.gantt-row {
+    height: var(--row-height) !important;
+    min-height: var(--row-height) !important;
+    max-height: var(--row-height) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+}
+
+/* 줄무늬 효과 추가 적용 */
+.gantt-row:nth-child(even) {
+    background-color: var(--zebra-bg);
+}
+
+.gantt-row:hover {
+    background-color: var(--hover-bg);
 }
 
 .tree-expander {

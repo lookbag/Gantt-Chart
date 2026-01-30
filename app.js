@@ -79,6 +79,9 @@ class GanttApp {
             // [추가] 멤버 이니셜 아이콘 표시 실행
             this.renderProjectMemberIcons(projectName);
 
+            // [추가] 프로젝트 멤버 목록 가져오기 (Owner 선택용)
+            await this.fetchProjectMembers(projectName);
+
             // 관리자가 아니고, 해당 프로젝트 권한이 없는 경우 체크
             if (!Auth.isAdmin) {
                 const hasPermission = await this.checkPermission(Auth.user.id, projectName);
@@ -141,6 +144,35 @@ class GanttApp {
             return !!data;
         } catch (err) {
             return false;
+        }
+    }
+
+    // [신규 함수] 프로젝트 멤버 페치
+    async fetchProjectMembers(projectName) {
+        try {
+            // 1. 권한 테이블에서 user_id 조회
+            const { data: perms } = await this.supabase
+                .from('user_permissions')
+                .select('user_id')
+                .eq('project_name', projectName)
+                .eq('is_approved', true);
+
+            if (!perms || perms.length === 0) {
+                this.currentProjectMembers = [];
+                return;
+            }
+            const userIds = perms.map(p => p.user_id);
+
+            // 2. 프로필 테이블에서 이름 조회
+            const { data: profiles } = await this.supabase
+                .from('profiles')
+                .select('id, display_name, email')
+                .in('id', userIds);
+
+            this.currentProjectMembers = profiles || [];
+        } catch (e) {
+            console.error("멤버 로드 실패", e);
+            this.currentProjectMembers = [];
         }
     }
 
@@ -398,96 +430,84 @@ class GanttApp {
     renderTreeGrid() {
         const container = document.getElementById('treeGrid');
         container.innerHTML = '';
-
         const filter = this.searchQuery.toLowerCase();
 
-        // 날짜 차이(일수) 계산 헬퍼 함수
-        const getDuration = (start, end) => {
-            const s = new Date(start);
-            const e = new Date(end);
-            const diffTime = Math.abs(e - s);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays + 1; // 당일 포함
+        // 헬퍼: 날짜 계산
+        const getDuration = (s, e) => {
+            if (!s || !e) return '-';
+            const diff = Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24));
+            return (diff + 1) + 'd';
+        };
+
+        // [소유자 옵션 HTML 생성]
+        const members = this.currentProjectMembers || [];
+        const createOwnerSelect = (taskId, currentUserId) => {
+            let options = `<option value="">-</option>`;
+            members.forEach(m => {
+                const selected = String(m.id) === String(currentUserId) ? 'selected' : '';
+                const name = m.display_name || m.email.split('@')[0];
+                options += `<option value="${m.id}" ${selected}>${name}</option>`;
+            });
+            // onchange 이벤트로 즉시 업데이트
+            return `<select class="owner-select" onchange="app.updateTaskOwner('${taskId}', this.value)" onclick="event.stopPropagation()">${options}</select>`;
         };
 
         const renderItem = (task, depth = 0) => {
-            if (task.rowTaskId) return; // 같은 줄 아이템은 트리 목록에 표시 안 함
+            if (task.rowTaskId) return; // Same Row Item은 트리에서 제외
 
-            const matchesFilter = task.label.toLowerCase().includes(filter);
-            const hasVisibleChildren = this.tasks.some(t => t.parentId === task.id && (t.label.toLowerCase().includes(filter) || filter === ''));
-
-            if (filter !== '' && !matchesFilter && !hasVisibleChildren) return;
+            // 필터 로직
+            const matches = task.label.toLowerCase().includes(filter);
+            const hasVisibleChild = this.tasks.some(t => t.parentId === task.id && (t.label.toLowerCase().includes(filter) || filter === ''));
+            if (filter !== '' && !matches && !hasVisibleChild) return;
 
             const row = document.createElement('div');
-            // 기존 클래스 유지 + 프로젝트 타입이면 'project-row' 추가 (색상 강조용)
-            row.className = `tree-row ${task.parentId === null ? 'project-row' : ''}`;
+            // 'project-row' 클래스: 최상위(parentId가 없는) 항목에만 적용
+            row.className = `tree-row ${!task.parentId ? 'project-row' : ''}`;
             row.dataset.id = task.id;
 
             const hasChildren = this.tasks.some(t => t.parentId === task.id);
-            const duration = getDuration(task.start, task.end);
+            const indent = depth * 20 + 8;
 
-            // [소유자 표시] 실제 이름 매핑이 복잡하면 일단 ID 앞자리나 'User'로 표시
-            const ownerInitial = task.user_id ? 'Member' : '-';
-
-            // [그리드 셀 구성] CSS에서 정의한 6개 컬럼에 맞춰 div 생성
             row.innerHTML = `
-                <div class="tree-cell name-cell" style="padding-left: ${depth * 20 + 8}px;">
+                <div class="tree-cell name-cell" style="padding-left: ${indent}px;">
                     <span class="tree-expander">
                         ${hasChildren ? `<i data-lucide="${task.expanded ? 'chevron-down' : 'chevron-right'}"></i>` : ''}
                     </span>
                     <span class="tree-label-text">${task.label}</span>
                     <button class="icon-btn more-btn" style="margin-left:auto; opacity:0;"><i data-lucide="more-vertical" style="width:14px;"></i></button>
                 </div>
-
-                <div class="tree-cell" style="color:#666;">
-                    ${ownerInitial}
-                </div>
-
-                <div class="tree-cell">
-                    ${task.start.substring(5).replace('-', '/')} 
-                </div>
-
-                <div class="tree-cell">
-                    ${task.end.substring(5).replace('-', '/')}
-                </div>
-
-                <div class="tree-cell">
-                    ${duration}d
-                </div>
-
+                <div class="tree-cell">${createOwnerSelect(task.id, task.user_id)}</div>
+                <div class="tree-cell">${task.start ? task.start.substring(5).replace('-', '/') : '-'}</div>
+                <div class="tree-cell">${task.end ? task.end.substring(5).replace('-', '/') : '-'}</div>
+                <div class="tree-cell">${getDuration(task.start, task.end)}</div>
                 <div class="tree-cell" style="flex-direction:column; justify-content:center; align-items: flex-start;">
-                    <span style="font-size:11px; font-weight:600;">${task.progress}%</span>
-                    <div class="cell-progress-bar">
-                        <div class="cell-progress-value" style="width: ${task.progress}%;"></div>
-                    </div>
+                    <span style="font-size:10px;">${task.progress}%</span>
+                    <div class="cell-progress-bar"><div class="cell-progress-value" style="width: ${task.progress}%;"></div></div>
                 </div>
             `;
-
             container.appendChild(row);
 
-            // more-btn 호버 효과 복구
-            row.addEventListener('mouseenter', () => {
-                const btn = row.querySelector('.more-btn');
-                if (btn) btn.style.opacity = '1';
-            });
-            row.addEventListener('mouseleave', () => {
-                const btn = row.querySelector('.more-btn');
-                if (btn) btn.style.opacity = '0';
-            });
+            // 이벤트 리스너 (더보기 버튼 등)
+            row.addEventListener('mouseenter', () => { const b = row.querySelector('.more-btn'); if (b) b.style.opacity = '1'; });
+            row.addEventListener('mouseleave', () => { const b = row.querySelector('.more-btn'); if (b) b.style.opacity = '0'; });
 
             if (task.expanded || filter !== '') {
-                this.tasks
-                    .filter(t => t.parentId === task.id)
-                    .forEach(child => renderItem(child, depth + 1));
+                this.tasks.filter(t => t.parentId === task.id).forEach(c => renderItem(c, depth + 1));
             }
         };
 
-        // 최상위 항목(프로젝트)부터 렌더링 시작
-        this.tasks
-            .filter(t => t.parentId === null)
-            .forEach(task => renderItem(task));
-
+        this.tasks.filter(t => t.parentId === null).forEach(t => renderItem(t));
         lucide.createIcons();
+    }
+
+    // [신규 함수] 소유자 변경 시 DB 저장
+    async updateTaskOwner(taskId, newUserId) {
+        const task = this.tasks.find(t => String(t.id) === String(taskId));
+        if (task) {
+            task.user_id = newUserId || null;
+            await this.syncTask(task); // Supabase 저장
+            // 화면 깜빡임 없이 유지하기 위해 renderAll 호출 안 함 (이미 값은 변경됨)
+        }
     }
 
     renderGanttTimeline() {
@@ -515,20 +535,17 @@ class GanttApp {
 
     renderGanttBars() {
         const body = document.getElementById('ganttBody');
-        // 기존 내용 깨끗이 비우기
-        body.innerHTML = '';
+        body.innerHTML = ''; // 초기화
 
         const filter = this.searchQuery.toLowerCase();
         const mainVisibleTasks = [];
 
-        // 화면에 보여질 태스크 수집 (기존 로직 유지)
+        // 트리 리스트와 똑같은 순서로 태스크 수집
         const collectVisible = (parentId = null) => {
             this.tasks.filter(t => t.parentId === parentId && !t.rowTaskId).forEach(t => {
                 const matches = t.label.toLowerCase().includes(filter);
-                const sameRowMatches = this.tasks.some(s => s.rowTaskId === t.id && s.label.toLowerCase().includes(filter));
                 const hasVisibleChild = this.tasks.some(child => child.parentId === t.id && (child.label.toLowerCase().includes(filter) || filter === ''));
-
-                if (filter === '' || matches || sameRowMatches || hasVisibleChild) {
+                if (filter === '' || matches || hasVisibleChild) {
                     mainVisibleTasks.push(t);
                     if (t.expanded || filter !== '') collectVisible(t.id);
                 }
@@ -536,24 +553,24 @@ class GanttApp {
         };
         collectVisible();
 
-        const ROW_HEIGHT = 40; // 높이 40px 고정
+        const ROW_HEIGHT = 40; // CSS와 동일하게 40px 고정
 
         mainVisibleTasks.forEach((mainTask) => {
-            // 1. 각 줄(Row)을 먼저 만듭니다.
+            // 1. 빈 줄 생성 (높이 확보용)
             const row = document.createElement('div');
             row.className = 'gantt-row';
             row.style.height = `${ROW_HEIGHT}px`;
-
-            // [핵심] 이 줄(Row)을 바디에 붙입니다.
             body.appendChild(row);
 
-            // 2. 이 줄에 들어가야 할 막대들을 찾습니다.
+            // [Issue 5 해결] Main Task(최상위 항목)는 간트 바를 그리지 않음
+            if (mainTask.parentId === null) return;
+
+            // 2. 바(Bar) 그리기 (Main Task가 아닐 때만)
             const rowTasks = [mainTask, ...this.tasks.filter(t => t.rowTaskId === mainTask.id)];
 
             rowTasks.forEach(task => {
                 const start = new Date(task.start);
                 const end = new Date(task.end);
-
                 const left = (start - this.viewStart) / (1000 * 60 * 60 * 24) * this.pxPerDay;
                 const width = (end - start) / (1000 * 60 * 60 * 24) * this.pxPerDay;
 
@@ -563,14 +580,9 @@ class GanttApp {
                 bar.className = 'gantt-bar';
                 bar.style.left = `${left}px`;
                 bar.style.width = `${width}px`;
-
-                // [수정] 복잡한 계산 없이, 그냥 그 줄 안에서 위쪽 8px만 띄웁니다.
-                // (Row가 relative, Bar가 absolute이므로 Row 기준으로 배치됨)
-                bar.style.top = '8px';
-
+                bar.style.top = '8px'; // 40px 높이 중앙 정렬
                 bar.dataset.id = task.id;
 
-                // 색상 처리
                 let barColor = task.color;
                 if (parseInt(task.progress) === 100) barColor = '#000000';
                 bar.style.backgroundColor = barColor;
@@ -588,15 +600,12 @@ class GanttApp {
                     this.showContextMenu(e, task.id);
                 });
 
-                // [핵심 해결책] 막대를 '전체 화면'이 아니라 '현재 줄(row)' 안에 집어넣습니다.
+                // 줄 안에 바 넣기
                 row.appendChild(bar);
             });
         });
 
-        // 전체 높이 지정 (스크롤바 용)
         body.style.height = `${mainVisibleTasks.length * ROW_HEIGHT + 50}px`;
-
-        // 오늘 날짜 선 업데이트
         this.updateTodayIndicator();
     }
 
@@ -863,47 +872,55 @@ class GanttApp {
 
     async addNewTask(parentId = null, rowTaskId = null) {
         const projectName = document.getElementById('appTitle').innerText.trim();
+        let labelName = "New Task";
+
+        // [Issue 4] Main Task(녹색 버튼)일 경우 이름 입력받기
+        if (!parentId && !rowTaskId) {
+            const input = prompt("Enter Main Task Name:");
+            if (input === null) return; // 취소 누름
+            if (input.trim() === "") return;
+            labelName = input.trim();
+        } else {
+            labelName = rowTaskId ? 'Sub item' : 'Child item';
+        }
+
         const newTask = {
-            label: rowTaskId ? 'Subtask' : (parentId ? 'New Subtask' : 'New Project'),
-            start: '2026-03-01',
-            end: '2026-03-15',
+            label: labelName,
+            start: new Date().toISOString().split('T')[0],
+            end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             progress: 0,
             color: '#0084d1',
             type: 'Task',
             expanded: true,
             parentId: parentId,
             rowTaskId: rowTaskId,
-            weekdays: 10,
+            weekdays: 5,
             state: 'none',
             project_name: projectName,
-            user_id: Auth.user.id, // 작성자 아이디 포함
+            user_id: Auth.user.id,
             description: ''
         };
 
         try {
-            const performInsert = async (dataToInsert) => {
-                const { data: insertData, error: insertError } = await this.supabase
-                    .from('tasks')
-                    .insert([dataToInsert])
-                    .select();
-
-                if (insertError && insertError.message.includes('description')) {
-                    const { description, ...dataWithoutDesc } = dataToInsert;
-                    return await this.supabase.from('tasks').insert([dataWithoutDesc]).select();
-                }
-                return { data: insertData, error: insertError };
-            };
-
-            let { data, error } = await performInsert(newTask);
+            // Supabase 저장
+            const { data, error } = await this.supabase.from('tasks').insert([newTask]).select();
             if (error) throw error;
 
-            const createdTask = data[0];
-            this.tasks.push(createdTask);
+            const created = data[0];
+            this.tasks.push(created);
+
+            // 화면 갱신
             this.renderAll();
-            this.openEditModal(createdTask.id);
+
+            // [Issue 2, 3 해결] 모달을 바로 띄우지 않고, 데이터가 렌더링된 후 필요하면 띄움
+            // Main Task는 이름 입력했으니 모달 안 띄움. 하위 아이템만 띄움.
+            if (parentId || rowTaskId) {
+                // DOM 렌더링 시간 확보 후 모달 오픈
+                setTimeout(() => this.openEditModal(created.id), 100);
+            }
         } catch (err) {
-            console.error('Error adding task:', err.message);
-            alert('작업 추가 실패: ' + err.message);
+            console.error('Task Add Error:', err);
+            alert('Error adding task: ' + err.message);
         }
     }
 
